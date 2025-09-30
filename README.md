@@ -11,7 +11,7 @@
 
 *支持试卷录入、学生错题标记、高度自定义的Word文档导出和实时预览*
 
-[🚀 快速开始](#-快速开始) • [📱 功能展示](#-功能展示) • [🔧 API文档](#-api接口) • [🤝 贡献指南](#-贡献指南)
+[🚀 快速开始](#-快速开始) • [📱 功能展示](#-功能展示) • [🤝 贡献指南](#-贡献指南)
 
 </div>
 
@@ -237,98 +237,6 @@ wrong-question-system/
    - 📦 批量导出：一键生成所有学生错题，下载ZIP压缩包
 2. **下载文件**：支持浏览器直接下载
 
-## 📊 数据库设计
-
-### 🗂️ 数据表结构
-
-#### 试卷表 (papers)
-| 字段名 | 数据类型 | 说明 | 约束 |
-|--------|----------|------|------|
-| id | INTEGER | 主键ID | PRIMARY KEY, AUTOINCREMENT |
-| name | TEXT | 试卷名称 | NOT NULL |
-| created_at | DATETIME | 创建时间 | DEFAULT CURRENT_TIMESTAMP |
-
-#### 题目表 (questions)
-| 字段名 | 数据类型 | 说明 | 约束 |
-|--------|----------|------|------|
-| id | INTEGER | 主键ID | PRIMARY KEY, AUTOINCREMENT |
-| paper_id | INTEGER | 试卷ID | FOREIGN KEY -> papers.id |
-| question_no | INTEGER | 题目序号 | NOT NULL |
-| question_text | TEXT | 题目文字内容 | NULLABLE |
-| image_urls | TEXT | 图片URL列表 | 逗号分隔存储 |
-| wrong_students | TEXT | 错题学生ID列表 | 逗号分隔存储 |
-| created_at | DATETIME | 创建时间 | DEFAULT CURRENT_TIMESTAMP |
-
-#### 学生表 (students)
-| 字段名 | 数据类型 | 说明 | 约束 |
-|--------|----------|------|------|
-| id | INTEGER | 主键ID | PRIMARY KEY, AUTOINCREMENT |
-| class_name | TEXT | 班级名称 | NOT NULL |
-| student_no | TEXT | 学号 | UNIQUE, NOT NULL |
-| name | TEXT | 学生姓名 | NOT NULL |
-| created_at | DATETIME | 创建时间 | DEFAULT CURRENT_TIMESTAMP |
-
-### 🔧 导出配置文件结构
-```json
-{
-  "title_size": 16,           // 标题字体大小
-  "question_number_size": 14, // 题号字体大小
-  "text_size": 12,           // 正文字体大小
-  "line_spacing": 1.5,       // 行间距
-  "image_scale": 1.0,        // 图片缩放比例
-  "image_width": 5.0,        // 图片宽度(英寸)
-  "question_spacing": 0,     // 题目后留白行数
-  "show_student_info": true, // 显示学生信息
-  "show_question_text": true,// 显示题目文字
-  "question_overrides": {    // 单题覆盖设置
-    "1": {                   // 题目ID
-      "question_number_size": 18,
-      "text_size": 14
-    }
-  }
-}
-```
-
-## 🔧 API接口
-
-### 📋 试卷管理
-```http
-GET    /api/papers/              # 获取试卷列表
-POST   /api/papers/              # 创建新试卷
-DELETE /api/papers/{paper_id}    # 删除试卷
-```
-
-### 📝 题目管理
-```http
-GET    /api/questions/paper/{paper_id}    # 获取试卷下的所有题目
-POST   /api/questions/                    # 创建新题目
-PUT    /api/questions/{question_id}       # 更新题目信息
-DELETE /api/questions/{question_id}       # 删除题目
-```
-
-### 👥 学生管理
-```http
-GET    /api/students/           # 获取学生列表
-POST   /api/students/           # 创建新学生
-PUT    /api/students/{id}       # 更新学生信息
-DELETE /api/students/{id}       # 删除学生
-```
-
-### 📤 导出功能
-```http
-GET    /api/export/settings/{paper_id}           # 获取导出设置
-POST   /api/export/settings/{paper_id}           # 保存导出设置
-POST   /api/export/student/{paper_id}            # 导出单个学生错题
-POST   /api/export/all/{paper_id}                # 导出所有学生错题
-GET    /api/export/preview/{paper_id}            # 获取预览数据
-GET    /download/{filename}                      # 下载文件
-```
-
-### 📁 文件上传
-```http
-POST   /api/upload             # 上传图片文件
-```
-
 ## 🚀 部署指南
 
 ### 🏠 本地开发环境
@@ -342,59 +250,6 @@ pip install -r requirements.txt
 
 # 启动开发服务器（支持热重载）
 python start.py
-```
-
-### 🌐 生产环境部署
-
-#### 使用 Gunicorn（Linux/macOS）
-```bash
-# 安装Gunicorn
-pip install gunicorn
-
-# 启动生产服务器
-gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
-```
-
-#### 使用 Docker
-```dockerfile
-# Dockerfile
-FROM python:3.10-slim
-
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-
-COPY . .
-EXPOSE 8000
-
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
-```
-
-```bash
-# 构建和运行
-docker build -t wrong-question-system .
-docker run -p 8000:8000 -v ./data:/app/data wrong-question-system
-```
-
-#### Nginx 反向代理配置
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com;
-
-    location / {
-        proxy_pass http://127.0.0.1:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    }
-    
-    location /static/ {
-        alias /path/to/your/app/static/;
-        expires 1y;
-        add_header Cache-Control "public, immutable";
-    }
-}
 ```
 
 ## ⚙️ 配置说明
@@ -428,15 +283,6 @@ chmod 755 static/export_settings
 chmod 644 wrong_question.db
 ```
 
-## 🔒 安全建议
-
-### 🛡️ 生产环境安全配置
-1. **关闭调试模式**: 设置 `DEBUG = False`
-2. **配置防火墙**: 仅开放必要端口
-3. **定期备份**: 备份数据库和上传文件
-4. **SSL证书**: 使用HTTPS加密传输
-5. **访问控制**: 配置IP白名单或用户认证
-
 ### 💾 数据备份策略
 ```bash
 # 数据库备份
@@ -448,76 +294,6 @@ tar -czf backup/uploads_$(date +%Y%m%d).tar.gz static/uploads/
 # 配置文件备份
 tar -czf backup/settings_$(date +%Y%m%d).tar.gz static/export_settings/
 ```
-
-## 🚧 故障排除
-
-### ❗ 常见问题及解决方案
-
-#### 1. 依赖安装失败
-```bash
-# 问题：pip安装依赖时出错
-# 解决：升级pip并清理缓存
-python -m pip install --upgrade pip
-pip cache purge
-pip install -r requirements.txt --no-cache-dir
-```
-
-#### 2. 端口被占用
-```bash
-# 问题：端口8000已被占用
-# 解决：修改config.py中的PORT设置或终止占用进程
-netstat -ano | findstr :8000  # Windows
-lsof -i :8000                 # macOS/Linux
-```
-
-#### 3. 文件上传失败
-```bash
-# 问题：图片上传失败
-# 解决：检查目录权限和磁盘空间
-ls -la static/uploads/        # 检查权限
-df -h                         # 检查磁盘空间
-```
-
-#### 4. Word导出异常
-```bash
-# 问题：Word文档生成失败
-# 解决：检查python-docx版本和图片文件
-pip show python-docx
-# 确保图片文件存在且格式正确
-```
-
-#### 5. 数据库错误
-```bash
-# 问题：数据库连接失败
-# 解决：检查数据库文件权限和SQLite版本
-sqlite3 wrong_question.db ".schema"  # 检查数据库结构
-```
-
-### 🔍 日志查看
-```bash
-# 启动应用时查看详细日志
-python start.py --log-level debug
-
-# 或使用uvicorn直接启动
-uvicorn main:app --reload --log-level debug
-```
-
-## 🎯 性能优化
-
-### ⚡ 前端优化
-- **图片压缩**: 上传时自动压缩大图片
-- **缓存策略**: 静态资源设置适当缓存时间
-- **懒加载**: 大量题目时使用分页加载
-
-### 🚀 后端优化
-- **数据库索引**: 为常用查询字段添加索引
-- **异步处理**: 使用FastAPI的异步特性
-- **文件清理**: 定期清理过期的导出文件
-
-### 📊 监控建议
-- **资源监控**: 监控CPU、内存、磁盘使用率
-- **日志分析**: 分析错误日志和访问日志
-- **性能指标**: 监控API响应时间和数据库查询性能
 
 ## 🔮 未来规划
 
@@ -541,34 +317,6 @@ uvicorn main:app --reload --log-level debug
 
 我们欢迎所有形式的贡献！无论是bug报告、功能建议、代码贡献还是文档改进。
 
-#### 🐛 报告Bug
-1. 在 [Issues](https://github.com/yourusername/wrong-question-system/issues) 中搜索是否已有相同问题
-2. 如果没有，请创建新的Issue，并提供：
-   - 详细的问题描述
-   - 复现步骤
-   - 环境信息（操作系统、Python版本等）
-   - 错误日志或截图
-
-#### ✨ 建议新功能
-1. 在 [Issues](https://github.com/yourusername/wrong-question-system/issues) 中创建Feature Request
-2. 详细描述功能需求和使用场景
-3. 说明该功能的重要性和预期效果
-
-#### 🔧 代码贡献
-1. **Fork项目** 到你的GitHub账号
-2. **创建分支** `git checkout -b feature/AmazingFeature`
-3. **编写代码** 并确保遵循项目代码规范
-4. **运行测试** `python test_system.py`
-5. **提交更改** `git commit -m 'Add some AmazingFeature'`
-6. **推送分支** `git push origin feature/AmazingFeature`
-7. **创建Pull Request**
-
-#### 📝 代码规范
-- **Python代码**: 遵循PEP 8规范
-- **JavaScript代码**: 使用2空格缩进，分号结尾
-- **注释**: 重要功能必须有中文注释
-- **命名**: 使用有意义的变量和函数名
-
 ### 🏆 贡献者
 
 感谢所有为项目做出贡献的开发者！
@@ -577,15 +325,7 @@ uvicorn main:app --reload --log-level debug
 
 ## 📄 许可证
 
-本项目基于 **MIT许可证** 开源 - 查看 [LICENSE](LICENSE) 文件了解详情。
-
-### 🎯 MIT许可证说明
-- ✅ **商业使用** - 可用于商业项目
-- ✅ **修改** - 可以修改源代码
-- ✅ **分发** - 可以分发原始或修改后的代码
-- ✅ **私人使用** - 可以私人使用
-- ❗ **责任** - 作者不承担任何责任
-- ❗ **保修** - 不提供任何形式的保修
+本项目基于 **Apache License 2.0** 开源 - 查看 [LICENSE](LICENSE) 文件了解详情。
 
 ## � 致谢
 
@@ -608,18 +348,6 @@ uvicorn main:app --reload --log-level debug
 ---
 
 <div align="center">
-
-### 📞 联系我们
-
-🌐 **项目主页**: [GitHub Repository](https://github.com/yourusername/wrong-question-system)
-
-📧 **邮箱联系**: your-email@example.com
-
-💬 **问题反馈**: [GitHub Issues](https://github.com/yourusername/wrong-question-system/issues)
-
-📱 **QQ群**: 123456789（错题管理系统交流群）
-
----
 
 **如果这个项目对您有帮助，请不要忘记给它一个 ⭐ Star！**
 
