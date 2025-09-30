@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>学生管理 - 错题管理系统</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>👥 学生管理</h1>
+            <div>
+                <a href="/" class="btn btn-secondary">← 返回首页</a>
+                <button onclick="addStudent()" class="btn btn-primary">➕ 添加学生</button>
+            </div>
+        </div>
+
+        <!-- 筛选和搜索 -->
+        <div class="card">
+            <div class="form-group">
+                <label class="form-label">筛选和搜索</label>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <select id="class-filter" class="form-input" style="flex: 1; min-width: 150px;">
+                        <option value="">所有班级</option>
+                    </select>
+                    <input type="text" id="search-input" class="form-input" placeholder="搜索学号或姓名..." style="flex: 2; min-width: 200px;">
+                </div>
+            </div>
+        </div>
+
+        <!-- 学生列表 -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">学生列表</h2>
+            </div>
+            <div id="students-list">
+                <div style="text-align: center; padding: 40px; color: #7f8c8d;">
+                    <div class="loading"></div>
+                    <p style="margin-top: 10px;">加载中...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加/编辑学生模态框 -->
+    <div id="student-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-title">添加学生</h3>
+                <button onclick="closeModal()" class="btn btn-secondary">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="student-form">
+                    <input type="hidden" id="student-id" name="id">
+                    <div class="form-group">
+                        <label class="form-label">班级</label>
+                        <input type="text" name="class_name" class="form-input" placeholder="请输入班级名称" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">学号</label>
+                        <input type="text" name="student_no" class="form-input" placeholder="请输入学号" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">姓名</label>
+                        <input type="text" name="name" class="form-input" placeholder="请输入学生姓名" required>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" onclick="closeModal()" class="btn btn-secondary">取消</button>
+                        <button type="submit" class="btn btn-primary">保存</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/utils.js"></script>
+    <script>
+        let students = [];
+        let classes = [];
+        let currentFilter = { class_name: '', search: '' };
+        let editingStudent = null;
+
+        // 页面加载完成后执行
+        document.addEventListener('DOMContentLoaded', function() {
+            loadStudents();
+            loadClasses();
+            bindEvents();
+        });
+
+        // 绑定事件
+        function bindEvents() {
+            // 班级筛选
+            document.getElementById('class-filter').addEventListener('change', (e) => {
+                currentFilter.class_name = e.target.value;
+                filterAndRenderStudents();
+            });
+
+            // 搜索
+            document.getElementById('search-input').addEventListener('input', Utils.debounce((e) => {
+                currentFilter.search = e.target.value;
+                filterAndRenderStudents();
+            }, 300));
+        }
+
+        // 加载学生列表
+        async function loadStudents() {
+            try {
+                students = await Utils.get('/api/students/');
+                renderStudents();
+            } catch (error) {
+                Utils.showError('加载学生列表失败: ' + error.message);
+                document.getElementById('students-list').innerHTML = `
+                    <div style="text-align: center; padding: 40px; color: #e74c3c;">
+                        <p>😞 加载失败</p>
+                        <button onclick="loadStudents()" class="btn btn-primary" style="margin-top: 10px;">重新加载</button>
+                    </div>
+                `;
+            }
+        }
+
+        // 加载班级列表
+        async function loadClasses() {
+            try {
+                const response = await Utils.get('/api/students/classes');
+                classes = response;
+                renderClassFilter();
+            } catch (error) {
+                console.error('加载班级列表失败:', error);
+            }
+        }
+
+        // 渲染班级筛选器
+        function renderClassFilter() {
+            const select = document.getElementById('class-filter');
+            let html = '<option value="">所有班级</option>';
+            
+            classes.forEach(cls => {
+                html += `<option value="${cls.class_name}">${cls.class_name}</option>`;
+            });
+            
+            select.innerHTML = html;
+        }
+
+        // 筛选和渲染学生
+        function filterAndRenderStudents() {
+            let filteredStudents = students;
+
+            // 班级筛选
+            if (currentFilter.class_name) {
+                filteredStudents = filteredStudents.filter(student => 
+                    student.class_name === currentFilter.class_name
+                );
+            }
+
+            // 搜索筛选
+            if (currentFilter.search) {
+                const searchTerm = currentFilter.search.toLowerCase();
+                filteredStudents = filteredStudents.filter(student => 
+                    student.name.toLowerCase().includes(searchTerm) ||
+                    student.student_no.toLowerCase().includes(searchTerm)
+                );
+            }
+
+            renderStudents(filteredStudents);
+        }
+
+        // 渲染学生列表
+        function renderStudents(studentsToRender = students) {
+            const container = document.getElementById('students-list');
+            
+            if (studentsToRender.length === 0) {
+                const message = currentFilter.class_name || currentFilter.search 
+                    ? '没有找到符合条件的学生' 
+                    : '还没有学生';
+                    
+                container.innerHTML = `
+                    <div style="text-align: center; padding: 40px; color: #7f8c8d;">
+                        <p>👤 ${message}</p>
+                        ${!currentFilter.class_name && !currentFilter.search ? 
+                            '<p style="font-size: 14px; margin-top: 10px;">点击"添加学生"开始添加</p>' : 
+                            ''
+                        }
+                    </div>
+                `;
+                return;
+            }
+
+            let html = '';
+            studentsToRender.forEach(student => {
+                html += `
+                    <div class="list-item">
+                        <div>
+                            <div class="list-item-title">${student.name}</div>
+                            <div class="list-item-subtitle">${student.class_name} - ${student.student_no}</div>
+                        </div>
+                        <div>
+                            <button onclick="editStudent(${student.id})" class="btn btn-primary">✏️ 编辑</button>
+                            <button onclick="deleteStudent(${student.id})" class="btn btn-danger">🗑️ 删除</button>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+        }
+
+        // 添加学生
+        function addStudent() {
+            editingStudent = null;
+            document.getElementById('modal-title').textContent = '添加学生';
+            document.getElementById('student-form').reset();
+            document.getElementById('student-id').value = '';
+            document.getElementById('student-modal').classList.remove('hidden');
+        }
+
+        // 编辑学生
+        function editStudent(studentId) {
+            const student = students.find(s => s.id === studentId);
+            if (!student) return;
+
+            editingStudent = student;
+            document.getElementById('modal-title').textContent = '编辑学生';
+            document.getElementById('student-id').value = student.id;
+            document.querySelector('input[name="class_name"]').value = student.class_name;
+            document.querySelector('input[name="student_no"]').value = student.student_no;
+            document.querySelector('input[name="name"]').value = student.name;
+            document.getElementById('student-modal').classList.remove('hidden');
+        }
+
+        // 删除学生
+        async function deleteStudent(studentId) {
+            const student = students.find(s => s.id === studentId);
+            if (!student) return;
+
+            if (!Utils.confirm(`确定要删除学生 ${student.name}(${student.student_no}) 吗？删除后无法恢复。`)) {
+                return;
+            }
+
+            try {
+                await Utils.delete(`/api/students/${studentId}`);
+                Utils.showSuccess('学生删除成功');
+                loadStudents();
+                loadClasses(); // 重新加载班级列表
+            } catch (error) {
+                Utils.showError('删除失败: ' + error.message);
+            }
+        }
+
+        // 关闭模态框
+        function closeModal() {
+            document.getElementById('student-modal').classList.add('hidden');
+            document.getElementById('student-form').reset();
+            editingStudent = null;
+        }
+
+        // 表单提交
+        document.getElementById('student-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const studentData = {
+                class_name: formData.get('class_name'),
+                student_no: formData.get('student_no'),
+                name: formData.get('name')
+            };
+
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            const hideLoading = Utils.showLoading(submitBtn);
+
+            try {
+                if (editingStudent) {
+                    // 编辑
+                    await Utils.put(`/api/students/${editingStudent.id}`, studentData);
+                    Utils.showSuccess('学生信息更新成功');
+                } else {
+                    // 添加
+                    await Utils.post('/api/students/', studentData);
+                    Utils.showSuccess('学生添加成功');
+                }
+                
+                closeModal();
+                loadStudents();
+                loadClasses(); // 重新加载班级列表
+            } catch (error) {
+                Utils.showError('保存失败: ' + error.message);
+            } finally {
+                hideLoading();
+            }
+        });
+    </script>
+
+    <style>
+        /* 模态框样式 */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 8px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            padding: 20px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h3 {
+            margin: 0;
+            color: #2c3e50;
+        }
+
+        .modal-body {
+            padding: 20px;
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                gap: 15px;
+            }
+            
+            .header div {
+                display: flex;
+                gap: 10px;
+                width: 100%;
+            }
+            
+            .header .btn {
+                flex: 1;
+            }
+            
+            .list-item {
+                flex-direction: column;
+                gap: 15px;
+                align-items: flex-start;
+            }
+            
+            .list-item > div:last-child {
+                display: flex;
+                gap: 10px;
+                width: 100%;
+            }
+            
+            .list-item .btn {
+                flex: 1;
+                padding: 8px 12px;
+                font-size: 12px;
+            }
+        }
+    </style>
+</body>
+</html>

@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>导出预览 - 错题管理系统</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📄 导出预览</h1>
+            <div>
+                <button onclick="goBack()" class="btn btn-secondary">← 返回</button>
+                <button onclick="downloadWord()" class="btn btn-success">📥 下载Word</button>
+            </div>
+        </div>
+
+        <!-- 文档预览 -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title" id="preview-title">正在加载...</h2>
+            </div>
+            
+            <div class="word-preview" id="word-preview">
+                <div style="text-align: center; padding: 40px; color: #7f8c8d;">
+                    <div class="loading"></div>
+                    <p style="margin-top: 10px;">正在生成预览...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 生成进度 -->
+        <div id="generation-progress" class="card hidden">
+            <div class="card-header">
+                <h2 class="card-title">🔄 正在生成Word文档</h2>
+            </div>
+            <div class="progress-container">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-fill"></div>
+                </div>
+                <p id="progress-text">准备中...</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/utils.js"></script>
+    <script>
+        let paperId = null;
+        let studentId = null;
+        let paper = null;
+        let student = null;
+        let questions = [];
+        let wrongQuestions = [];
+        let exportSettings = null;
+        let downloadUrl = null;
+
+        // 页面加载完成后执行
+        document.addEventListener('DOMContentLoaded', function() {
+            // 从URL获取参数
+            const pathParts = window.location.pathname.split('/');
+            paperId = pathParts[pathParts.length - 2];
+            studentId = pathParts[pathParts.length - 1];
+            
+            if (!paperId || !studentId || isNaN(paperId) || isNaN(studentId)) {
+                Utils.showError('无效的参数');
+                goBack();
+                return;
+            }
+
+            loadPreviewData();
+        });
+
+        // 加载预览数据
+        async function loadPreviewData() {
+            try {
+                // 并行加载数据
+                const [paperData, studentData, questionsData, settingsData] = await Promise.all([
+                    Utils.get(`/api/papers/${paperId}`),
+                    Utils.get(`/api/students/${studentId}`),
+                    Utils.get(`/api/questions/paper/${paperId}`),
+                    Utils.get(`/api/export/settings/${paperId}`)
+                ]);
+
+                paper = paperData;
+                student = studentData;
+                questions = questionsData;
+                exportSettings = settingsData;
+
+                // 筛选出该学生的错题
+                filterWrongQuestions();
+                
+                // 渲染预览
+                renderPreview();
+                
+            } catch (error) {
+                Utils.showError('加载数据失败: ' + error.message);
+                goBack();
+            }
+        }
+
+        // 筛选错题
+        function filterWrongQuestions() {
+            wrongQuestions = [];
+            
+            for (const question of questions) {
+                if (question.wrong_students) {
+                    const wrongStudentIds = question.wrong_students.split(',')
+                        .map(id => parseInt(id.trim()))
+                        .filter(id => !isNaN(id));
+                    
+                    if (wrongStudentIds.includes(parseInt(studentId))) {
+                        wrongQuestions.push(question);
+                    }
+                }
+            }
+            
+            // 按题号排序
+            wrongQuestions.sort((a, b) => a.question_no - b.question_no);
+        }
+
+        // 获取题目的有效设置（支持单题覆盖）
+        function getQuestionSettings(questionId) {
+            if (!exportSettings) {
+                return {
+                    title_size: 16,
+                    question_number_size: 14,
+                    text_size: 12,
+                    image_scale: 1.0,
+                    image_width: 5.0,
+                    question_spacing: 0,
+                    show_student_info: true,
+                    show_question_text: true
+                };
+            }
+            
+            // 复制全局设置，移除 question_overrides 属性
+            const globalSettings = { ...exportSettings };
+            delete globalSettings.question_overrides;
+            
+            // 应用单题覆盖设置
+            const overrides = exportSettings.question_overrides || {};
+            const qid = questionId.toString();
+            
+            if (overrides[qid]) {
+                Object.assign(globalSettings, overrides[qid]);
+            }
+            
+            return globalSettings;
+        }
+
+        // 渲染预览
+        function renderPreview() {
+            // 更新标题
+            document.getElementById('preview-title').textContent = 
+                `${paper.name} - ${student.name}(${student.student_no}) 错题集`;
+
+            const container = document.getElementById('word-preview');
+            
+            if (wrongQuestions.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; padding: 40px; color: #7f8c8d;">
+                        <p>🎉 该学生没有错题</p>
+                        <p style="font-size: 14px; margin-top: 10px;">恭喜，所有题目都正确！</p>
+                    </div>
+                `;
+                return;
+            }
+
+            // 生成真实Word样式的预览
+            const globalSettings = exportSettings || {};
+            const titleSize = globalSettings.title_size || 16;
+            const showStudentInfo = globalSettings.show_student_info !== false;
+            
+            let html = `
+                <div class="word-document">
+            `;
+            
+            // 添加标题（如果设置显示）
+            if (showStudentInfo) {
+                html += `
+                    <div class="word-header">
+                        <h1 style="font-size: ${titleSize}pt; text-align: center; margin-bottom: 20pt;">
+                            ${paper.name} - ${student.name}(${student.student_no}) 错题集
+                        </h1>
+                    </div>
+                `;
+            }
+            
+            html += '<div class="word-content">';
+
+            wrongQuestions.forEach(question => {
+                // 获取该题的有效设置
+                const questionSettings = getQuestionSettings(question.id);
+                const questionNumberSize = questionSettings.question_number_size || 14;
+                const textSize = questionSettings.text_size || 12;
+                const imageScale = questionSettings.image_scale || 1.0;
+                const imageWidth = (questionSettings.image_width || 5.0) * imageScale;
+                const questionSpacing = questionSettings.question_spacing || 0;
+                const showQuestionText = questionSettings.show_question_text !== false;
+                
+                html += `
+                    <div class="word-question" style="margin-bottom: 15pt;">
+                        <h3 style="font-size: ${questionNumberSize}pt; font-weight: bold; margin-bottom: 10pt; color: #000;">
+                            第${question.question_no}题
+                        </h3>
+                `;
+                
+                // 添加题目文字（如果设置显示且存在）
+                if (showQuestionText && question.question_text && question.question_text.trim()) {
+                    html += `
+                        <div class="word-question-text" style="font-size: ${textSize}pt; margin-bottom: 10pt; line-height: 1.5; color: #333;">
+                            ${question.question_text.replace(/\n/g, '<br>')}
+                        </div>
+                    `;
+                }
+                
+                // 添加图片
+                if (question.image_urls) {
+                    const imageUrls = question.image_urls.split(',').filter(url => url.trim());
+                    if (imageUrls.length > 0) {
+                        html += '<div class="word-images" style="margin-bottom: 10pt;">';
+                        imageUrls.forEach(url => {
+                            const cleanUrl = url.trim();
+                            if (cleanUrl) {
+                                const widthPx = imageWidth * 72; // 1英寸 = 72像素
+                                html += `
+                                    <img src="${cleanUrl}" alt="题目图片" 
+                                         style="max-width: ${widthPx}px; width: auto; height: auto; 
+                                                margin-bottom: 8pt; display: block; 
+                                                border: 1px solid #ddd; border-radius: 2px;">
+                                `;
+                            }
+                        });
+                        html += '</div>';
+                    }
+                }
+                
+                // 添加留白（如果设置了间距）
+                if (questionSpacing > 0) {
+                    const spacingHeight = questionSpacing * 15; // 每行约15pt
+                    html += `
+                        <div class="word-spacing" style="height: ${spacingHeight}px; 
+                                                           border-left: 2px dashed #ccc; 
+                                                           margin-left: 15px; 
+                                                           margin-bottom: 10pt; 
+                                                           position: relative;">
+                            <span style="position: absolute; left: 10px; top: 50%; 
+                                         transform: translateY(-50%); color: #999; 
+                                         font-size: 10pt; background: white; padding: 0 5px;">
+                                留白${questionSpacing}行
+                            </span>
+                        </div>
+                    `;
+                }
+                
+                html += '</div>';
+            });
+
+            html += `
+                    </div>
+                </div>
+            `;
+
+            container.innerHTML = html;
+        }
+
+        // 下载Word文档
+        async function downloadWord() {
+            if (wrongQuestions.length === 0) {
+                Utils.showError('没有错题可以导出');
+                return;
+            }
+
+            // 显示进度条
+            showGenerationProgress();
+
+            try {
+                // 模拟进度更新
+                updateProgress(20, '正在分析错题...');
+                
+                await new Promise(resolve => setTimeout(resolve, 500));
+                updateProgress(50, '正在生成Word文档...');
+                
+                // 调用导出API
+                const response = await Utils.post(`/api/export/student/${paperId}`, {
+                    student_id: parseInt(studentId)
+                });
+                
+                updateProgress(80, '正在准备下载...');
+                await new Promise(resolve => setTimeout(resolve, 300));
+                
+                updateProgress(100, '完成！');
+                
+                // 隐藏进度条
+                hideGenerationProgress();
+                
+                Utils.showSuccess(`${student.name} 的错题文档生成完成`);
+                
+                // 开始下载
+                setTimeout(() => {
+                    Utils.downloadFile(response.download_url, `${student.name}-${student.student_no}.docx`);
+                }, 500);
+                
+            } catch (error) {
+                hideGenerationProgress();
+                Utils.showError('生成失败: ' + error.message);
+            }
+        }
+
+        // 显示生成进度
+        function showGenerationProgress() {
+            document.getElementById('generation-progress').classList.remove('hidden');
+            updateProgress(0, '准备中...');
+        }
+
+        // 隐藏生成进度
+        function hideGenerationProgress() {
+            document.getElementById('generation-progress').classList.add('hidden');
+        }
+
+        // 更新进度
+        function updateProgress(percent, text) {
+            document.getElementById('progress-fill').style.width = percent + '%';
+            document.getElementById('progress-text').textContent = text;
+        }
+
+        // 返回上一页
+        function goBack() {
+            window.history.back();
+        }
+    </script>
+
+    <style>
+        /* Word文档预览样式 */
+        .word-preview {
+            background: #f5f5f5;
+            padding: 20px;
+            min-height: 500px;
+            border-radius: 8px;
+        }
+
+        .word-document {
+            background: white;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 60px 80px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+            border-radius: 4px;
+            font-family: 'Times New Roman', serif;
+            line-height: 1.6;
+            color: #000;
+            position: relative;
+        }
+
+        /* 模拟Word页面边距 */
+        .word-document::before {
+            content: '';
+            position: absolute;
+            top: 40px;
+            left: 40px;
+            right: 40px;
+            bottom: 40px;
+            border: 1px solid #e0e0e0;
+            pointer-events: none;
+        }
+
+        .word-header {
+            text-align: center;
+            margin-bottom: 30pt;
+            position: relative;
+            z-index: 1;
+        }
+
+        .word-header h1 {
+            margin: 0 0 20pt 0;
+            color: #000;
+            font-weight: bold;
+        }
+
+        .word-content {
+            position: relative;
+            z-index: 1;
+        }
+
+        .word-question {
+            page-break-inside: avoid;
+            position: relative;
+        }
+
+        .word-question h3 {
+            margin: 0 0 10pt 0;
+            color: #000;
+            font-weight: bold;
+        }
+
+        .word-question-text {
+            margin-bottom: 10pt;
+            color: #333;
+            text-align: justify;
+        }
+
+        .word-images {
+            margin-bottom: 10pt;
+            text-align: left;
+        }
+
+        .word-images img {
+            margin-bottom: 8pt;
+            display: block;
+            border: 1px solid #ddd;
+            border-radius: 2px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .word-spacing {
+            border-left: 2px dashed #ccc;
+            margin-left: 15px;
+            margin-bottom: 10pt;
+            position: relative;
+        }
+
+        .word-images {
+            margin-bottom: 10pt;
+            text-align: left;
+        }
+
+        .word-images img {
+            margin-bottom: 8pt;
+            display: block;
+            border: 1px solid #ddd;
+            border-radius: 2px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .word-footer {
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+            color: #7f8c8d;
+            font-size: 12px;
+        }
+
+        /* 进度条样式 */
+        .progress-container {
+            padding: 20px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #f0f0f0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 15px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #3498db, #2ecc71);
+            width: 0%;
+            border-radius: 10px;
+            transition: width 0.3s ease;
+        }
+
+        #progress-text {
+            text-align: center;
+            color: #7f8c8d;
+            margin: 0;
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 900px) {
+            .word-document {
+                padding: 40px 30px;
+                margin: 0 10px;
+            }
+            
+            .word-document::before {
+                top: 20px;
+                left: 20px;
+                right: 20px;
+                bottom: 20px;
+            }
+        }
+        
+        @media (max-width: 600px) {
+            .word-preview {
+                padding: 10px;
+            }
+            
+            .word-document {
+                padding: 30px 20px;
+                margin: 0;
+            }
+            
+            .header .btn {
+                padding: 8px 12px;
+                font-size: 14px;
+            }
+        }
+
+        /* 打印样式 */
+        @media print {
+            .header, .card-header {
+                display: none;
+            }
+            
+            .word-preview {
+                background: white;
+                padding: 0;
+            }
+            
+            .word-document {
+                box-shadow: none;
+                margin: 0;
+                padding: 20mm;
+            }
+            
+            .word-document::before {
+                display: none;
+            }
+        }
+    </style>
+</body>
+</html>

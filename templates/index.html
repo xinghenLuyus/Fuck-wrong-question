@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>错题管理系统</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📝 错题管理系统</h1>
+            <div>
+                <a href="/students" class="btn btn-secondary">👥 学生管理</a>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">📁 文件管理</h2>
+                <div class="header-actions">
+                    <button onclick="createNewFolder()" class="btn btn-success">📁 新建文件夹</button>
+                    <button onclick="addPaper()" class="btn btn-primary">➕ 添加新试卷</button>
+                </div>
+            </div>
+            
+            <!-- 面包屑导航 -->
+            <div class="breadcrumb-nav" id="breadcrumb-nav">
+                <span class="breadcrumb-item active" onclick="navigateToFolder(null)">📁 根目录</span>
+            </div>
+            
+            <!-- 文件管理区域 -->
+            <div id="file-manager">
+                <div style="text-align: center; padding: 40px; color: #7f8c8d;">
+                    <div class="loading"></div>
+                    <p style="margin-top: 10px;">加载中...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加试卷模态框 -->
+    <div id="add-paper-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>添加新试卷</h3>
+                <button onclick="closeModal('add-paper-modal')" class="btn btn-secondary">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="add-paper-form">
+                    <div class="form-group">
+                        <label class="form-label">试卷名称</label>
+                        <input type="text" name="name" class="form-input" placeholder="请输入试卷名称" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">所属文件夹</label>
+                        <select name="category_id" class="form-input" id="paper-category-select">
+                            <option value="">根目录</option>
+                        </select>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" onclick="closeModal('add-paper-modal')" class="btn btn-secondary">取消</button>
+                        <button type="submit" class="btn btn-primary">创建并添加题目</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- 新建文件夹模态框 -->
+    <div id="new-folder-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>新建文件夹</h3>
+                <button onclick="closeModal('new-folder-modal')" class="btn btn-secondary">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="new-folder-form">
+                    <div class="form-group">
+                        <label class="form-label">文件夹名称</label>
+                        <input type="text" name="name" class="form-input" placeholder="请输入文件夹名称" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">父文件夹</label>
+                        <select name="parent_id" class="form-input" id="folder-parent-select">
+                            <option value="">根目录</option>
+                        </select>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" onclick="closeModal('new-folder-modal')" class="btn btn-secondary">取消</button>
+                        <button type="submit" class="btn btn-success">创建文件夹</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- 编辑文件模态框 -->
+    <div id="edit-file-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="edit-file-title">编辑</h3>
+                <button onclick="closeModal('edit-file-modal')" class="btn btn-secondary">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="edit-file-form">
+                    <input type="hidden" id="edit-file-id">
+                    <input type="hidden" id="edit-file-type">
+                    <div class="form-group">
+                        <label class="form-label" id="edit-file-name-label">名称</label>
+                        <input type="text" name="name" class="form-input" id="edit-file-name" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">所属文件夹</label>
+                        <select name="parent_id" class="form-input" id="edit-file-parent">
+                            <option value="">根目录</option>
+                        </select>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" onclick="closeModal('edit-file-modal')" class="btn btn-secondary">取消</button>
+                        <button type="submit" class="btn btn-primary">保存修改</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/utils.js"></script>
+    <script>
+        let papers = [];
+        let categories = [];
+        let currentFolder = null; // 当前所在文件夹
+        let breadcrumbPath = []; // 面包屑路径
+
+        // 页面加载完成后执行
+        document.addEventListener('DOMContentLoaded', function() {
+            loadFileManager();
+            bindEvents();
+        });
+
+        // 绑定事件
+        function bindEvents() {
+            // 添加试卷表单
+            document.getElementById('add-paper-form').addEventListener('submit', handleAddPaper);
+            // 新建文件夹表单
+            document.getElementById('new-folder-form').addEventListener('submit', handleNewFolder);
+            // 编辑文件表单
+            document.getElementById('edit-file-form').addEventListener('submit', handleEditFile);
+        }
+
+        // 加载文件管理器
+        async function loadFileManager() {
+            try {
+                // 并行加载分类和试卷数据
+                const [categoriesData, papersData] = await Promise.all([
+                    Utils.get('/api/categories/'),
+                    Utils.get('/api/papers/')
+                ]);
+                
+                categories = categoriesData;
+                papers = papersData;
+                
+                // 渲染文件管理器
+                renderFileManager();
+                updateFolderSelects();
+            } catch (error) {
+                console.error('加载数据失败:', error);
+                document.getElementById('file-manager').innerHTML = `
+                    <div style="text-align: center; padding: 40px; color: #e74c3c;">
+                        <p>😞 加载失败</p>
+                        <button onclick="loadFileManager()" class="btn btn-primary" style="margin-top: 10px;">重新加载</button>
+                    </div>
+                `;
+            }
+        }
+
+        // 渲染文件管理器
+        function renderFileManager() {
+            const container = document.getElementById('file-manager');
+            
+            // 获取当前文件夹下的子文件夹和试卷
+            const currentFolders = categories.filter(cat => cat.parent_id === currentFolder);
+            const currentPapers = papers.filter(paper => paper.category_id === currentFolder);
+            
+            if (currentFolders.length === 0 && currentPapers.length === 0) {
+                container.innerHTML = `
+                    <div class="file-manager-empty">
+                        <div class="empty-icon">📁</div>
+                        <p>文件夹为空</p>
+                        <p class="empty-subtitle">点击右上角按钮创建新文件夹或添加试卷</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            let html = '<div class="file-manager-list">';
+            
+            // 渲染文件夹
+            currentFolders.forEach(folder => {
+                html += `
+                    <div class="file-list-item folder-item" data-id="${folder.id}" data-type="folder">
+                        <div class="file-item-content">
+                            <div class="file-item-icon">📁</div>
+                            <div class="file-item-info">
+                                <div class="file-item-name">${folder.name}</div>
+                                <div class="file-item-type">文件夹</div>
+                            </div>
+                        </div>
+                        <div class="file-item-actions">
+                            <button onclick="event.stopPropagation(); editFile(${folder.id}, 'folder')" class="btn btn-sm btn-secondary" title="编辑">✏️</button>
+                            <button onclick="event.stopPropagation(); deleteFile(${folder.id}, 'folder')" class="btn btn-sm btn-danger" title="删除">🗑️</button>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            // 渲染试卷
+            currentPapers.forEach(paper => {
+                html += `
+                    <div class="file-list-item paper-item" data-id="${paper.id}" data-type="paper">
+                        <div class="file-item-content">
+                            <div class="file-item-icon">📄</div>
+                            <div class="file-item-info">
+                                <div class="file-item-name">${paper.name}</div>
+                                <div class="file-item-type">试卷</div>
+                            </div>
+                        </div>
+                        <div class="file-item-actions">
+                            <button onclick="event.stopPropagation(); addQuestion(${paper.id})" class="btn btn-sm btn-success" title="添加题目">➕</button>
+                            <button onclick="event.stopPropagation(); editFile(${paper.id}, 'paper')" class="btn btn-sm btn-secondary" title="编辑">✏️</button>
+                            <button onclick="event.stopPropagation(); deleteFile(${paper.id}, 'paper')" class="btn btn-sm btn-danger" title="删除">🗑️</button>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            container.innerHTML = html;
+            
+            // 绑定点击事件（移动端防误触优化）
+            bindFileItemEvents();
+            
+            // 更新面包屑导航
+            updateBreadcrumb();
+        }
+        
+        // 绑定文件项点击事件（防误触优化）
+        function bindFileItemEvents() {
+            const fileItems = document.querySelectorAll('.file-list-item');
+            
+            fileItems.forEach(item => {
+                let touchTimer = null;
+                let hasMoved = false;
+                let startX = 0;
+                let startY = 0;
+                
+                // 桌面端点击
+                item.addEventListener('click', function(e) {
+                    if (e.target.closest('.file-item-actions')) {
+                        return; // 点击操作按钮时不触发打开
+                    }
+                    
+                    const fileId = parseInt(this.dataset.id);
+                    const fileType = this.dataset.type;
+                    
+                    if (fileType === 'folder') {
+                        navigateToFolder(fileId);
+                    } else {
+                        viewPaper(fileId);
+                    }
+                });
+                
+                // 移动端触摸事件
+                item.addEventListener('touchstart', function(e) {
+                    if (e.target.closest('.file-item-actions')) {
+                        return;
+                    }
+                    
+                    hasMoved = false;
+                    const touch = e.touches[0];
+                    startX = touch.clientX;
+                    startY = touch.clientY;
+                    
+                    // 设置延迟执行，防止误触
+                    touchTimer = setTimeout(() => {
+                        if (!hasMoved) {
+                            this.classList.add('touch-active');
+                        }
+                    }, 100);
+                });
+                
+                item.addEventListener('touchmove', function(e) {
+                    const touch = e.touches[0];
+                    const deltaX = Math.abs(touch.clientX - startX);
+                    const deltaY = Math.abs(touch.clientY - startY);
+                    
+                    // 如果移动距离超过10px，认为是滚动操作
+                    if (deltaX > 10 || deltaY > 10) {
+                        hasMoved = true;
+                        if (touchTimer) {
+                            clearTimeout(touchTimer);
+                            touchTimer = null;
+                        }
+                        this.classList.remove('touch-active');
+                    }
+                });
+                
+                item.addEventListener('touchend', function(e) {
+                    if (touchTimer) {
+                        clearTimeout(touchTimer);
+                        touchTimer = null;
+                    }
+                    
+                    setTimeout(() => {
+                        this.classList.remove('touch-active');
+                    }, 150);
+                    
+                    // 只有在没有移动且不是点击操作按钮时才执行打开
+                    if (!hasMoved && !e.target.closest('.file-item-actions')) {
+                        const fileId = parseInt(this.dataset.id);
+                        const fileType = this.dataset.type;
+                        
+                        if (fileType === 'folder') {
+                            navigateToFolder(fileId);
+                        } else {
+                            viewPaper(fileId);
+                        }
+                    }
+                });
+            });
+        }
+
+        // 更新面包屑导航
+        function updateBreadcrumb() {
+            const container = document.getElementById('breadcrumb-nav');
+            let html = '<span class="breadcrumb-item' + (currentFolder === null ? ' active' : '') + '" onclick="navigateToFolder(null)">📁 根目录</span>';
+            
+            // 构建面包屑路径
+            if (currentFolder !== null) {
+                const path = buildFolderPath(currentFolder);
+                path.forEach((folder, index) => {
+                    const isLast = index === path.length - 1;
+                    html += `
+                        <span class="breadcrumb-separator">></span>
+                        <span class="breadcrumb-item${isLast ? ' active' : ''}" onclick="navigateToFolder(${folder.id})">
+                            📁 ${folder.name}
+                        </span>
+                    `;
+                });
+            }
+            
+            container.innerHTML = html;
+        }
+
+        // 构建文件夹路径
+        function buildFolderPath(folderId) {
+            const path = [];
+            let currentId = folderId;
+            
+            while (currentId !== null) {
+                const folder = categories.find(cat => cat.id === currentId);
+                if (!folder) break;
+                
+                path.unshift(folder);
+                currentId = folder.parent_id;
+            }
+            
+            return path;
+        }
+        
+        // 导航到文件夹
+        function navigateToFolder(folderId) {
+            currentFolder = folderId;
+            renderFileManager();
+        }
+        
+        // 创建新文件夹
+        function createNewFolder() {
+            updateFolderSelects();
+            document.getElementById('new-folder-modal').classList.remove('hidden');
+        }
+
+        // 更新文件夹选择器
+        function updateFolderSelects() {
+            const selects = [
+                document.getElementById('paper-category-select'),
+                document.getElementById('folder-parent-select'),
+                document.getElementById('edit-file-parent')
+            ];
+            
+            selects.forEach(select => {
+                if (!select) return;
+                
+                let html = '<option value="">根目录</option>';
+                
+                // 构建层级结构
+                const buildFolderTree = (parentId = null, level = 0) => {
+                    const folders = categories.filter(cat => cat.parent_id === parentId);
+                    folders.forEach(folder => {
+                        const indent = '\u00a0\u00a0'.repeat(level);
+                        html += `<option value="${folder.id}">${indent}📁 ${folder.name}</option>`;
+                        buildFolderTree(folder.id, level + 1);
+                    });
+                };
+                
+                buildFolderTree();
+                select.innerHTML = html;
+                
+                // 设置当前文件夹为默认选中
+                if (select.id === 'paper-category-select' || select.id === 'folder-parent-select') {
+                    select.value = currentFolder || '';
+                }
+            });
+        }
+
+        // 编辑文件（文件夹或试卷）
+        function editFile(fileId, fileType) {
+            const modal = document.getElementById('edit-file-modal');
+            const titleEl = document.getElementById('edit-file-title');
+            const idEl = document.getElementById('edit-file-id');
+            const typeEl = document.getElementById('edit-file-type');
+            const nameEl = document.getElementById('edit-file-name');
+            const parentEl = document.getElementById('edit-file-parent');
+            const labelEl = document.getElementById('edit-file-name-label');
+            
+            if (fileType === 'folder') {
+                const folder = categories.find(cat => cat.id === fileId);
+                if (!folder) return;
+                
+                titleEl.textContent = '编辑文件夹';
+                labelEl.textContent = '文件夹名称';
+                nameEl.value = folder.name;
+                parentEl.value = folder.parent_id || '';
+            } else {
+                const paper = papers.find(p => p.id === fileId);
+                if (!paper) return;
+                
+                titleEl.textContent = '编辑试卷';
+                labelEl.textContent = '试卷名称';
+                nameEl.value = paper.name;
+                parentEl.value = paper.category_id || '';
+            }
+            
+            idEl.value = fileId;
+            typeEl.value = fileType;
+            
+            updateFolderSelects();
+            modal.classList.remove('hidden');
+        }
+
+        // 删除文件（文件夹或试卷）
+        async function deleteFile(fileId, fileType) {
+            let fileName, confirmMessage, apiUrl;
+            
+            if (fileType === 'folder') {
+                const folder = categories.find(cat => cat.id === fileId);
+                if (!folder) return;
+                
+                fileName = folder.name;
+                confirmMessage = `确定要删除文件夹“${fileName}”吗？删除后无法恢复。`;
+                apiUrl = `/api/categories/${fileId}`;
+            } else {
+                const paper = papers.find(p => p.id === fileId);
+                if (!paper) return;
+                
+                fileName = paper.name;
+                confirmMessage = `确定要删除试卷“${fileName}”吗？删除后无法恢复。`;
+                apiUrl = `/api/papers/${fileId}`;
+            }
+            
+            if (!Utils.confirm(confirmMessage)) {
+                return;
+            }
+            
+            try {
+                await Utils.delete(apiUrl);
+                Utils.showSuccess(`${fileType === 'folder' ? '文件夹' : '试卷'}删除成功`);
+                loadFileManager();
+            } catch (error) {
+                Utils.showError('删除失败: ' + error.message);
+            }
+        }
+
+        // 关闭模态框
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.add('hidden');
+            if (modalId === 'add-paper-modal') {
+                document.getElementById('add-paper-form').reset();
+            } else if (modalId === 'new-folder-modal') {
+                document.getElementById('new-folder-form').reset();
+            } else if (modalId === 'edit-file-modal') {
+                document.getElementById('edit-file-form').reset();
+            }
+        }
+
+
+        // 处理表单提交
+        
+        // 处理添加试卷表单
+        async function handleAddPaper(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const paperData = {
+                name: formData.get('name'),
+                category_id: formData.get('category_id') || null
+            };
+
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            const hideLoading = Utils.showLoading(submitBtn);
+
+            try {
+                const paper = await Utils.post('/api/papers/', paperData);
+                Utils.showSuccess('试卷创建成功');
+                closeModal('add-paper-modal');
+                
+                // 刷新文件管理器
+                loadFileManager();
+                
+                // 跳转到添加题目页面
+                Utils.redirect(`/add_question/${paper.id}`);
+            } catch (error) {
+                Utils.showError('创建失败: ' + error.message);
+            } finally {
+                hideLoading();
+            }
+        }
+        
+        // 处理新建文件夹表单
+        async function handleNewFolder(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const folderData = {
+                name: formData.get('name'),
+                parent_id: formData.get('parent_id') || null
+            };
+
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            const hideLoading = Utils.showLoading(submitBtn);
+
+            try {
+                await Utils.post('/api/categories/', folderData);
+                Utils.showSuccess('文件夹创建成功');
+                closeModal('new-folder-modal');
+                
+                // 刷新文件管理器
+                loadFileManager();
+            } catch (error) {
+                Utils.showError('创建失败: ' + error.message);
+            } finally {
+                hideLoading();
+            }
+        }
+        
+        // 处理编辑文件表单
+        async function handleEditFile(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const fileId = document.getElementById('edit-file-id').value;
+            const fileType = document.getElementById('edit-file-type').value;
+            
+            const fileData = {
+                name: formData.get('name')
+            };
+            
+            if (fileType === 'folder') {
+                fileData.parent_id = formData.get('parent_id') || null;
+            } else {
+                fileData.category_id = formData.get('parent_id') || null;
+            }
+
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            const hideLoading = Utils.showLoading(submitBtn);
+
+            try {
+                const apiUrl = fileType === 'folder' ? `/api/categories/${fileId}` : `/api/papers/${fileId}`;
+                await Utils.put(apiUrl, fileData);
+                Utils.showSuccess(`${fileType === 'folder' ? '文件夹' : '试卷'}编辑成功`);
+                closeModal('edit-file-modal');
+                
+                // 刷新文件管理器
+                loadFileManager();
+            } catch (error) {
+                Utils.showError('编辑失败: ' + error.message);
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // 添加试卷
+        function addPaper() {
+            updateFolderSelects();
+            document.getElementById('add-paper-modal').classList.remove('hidden');
+        }
+
+        // 查看试卷
+        function viewPaper(paperId) {
+            Utils.redirect(`/preview/${paperId}`);
+        }
+
+        // 添加题目
+        function addQuestion(paperId) {
+            Utils.redirect(`/add_question/${paperId}`);
+        }
+
+
+    </script>
+
+    <style>
+        /* 文件管理器样式 - 列表模式 */
+        .file-manager-empty {
+            text-align: center;
+            padding: 60px 20px;
+            color: #7f8c8d;
+        }
+        
+        .empty-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+        
+        .empty-subtitle {
+            font-size: 14px;
+            margin-top: 10px;
+            opacity: 0.8;
+        }
+        
+        .file-manager-list {
+            padding: 0;
+        }
+        
+        .file-list-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 20px;
+            border-bottom: 1px solid #f0f0f0;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+            min-height: 60px;
+        }
+        
+        .file-list-item:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .file-list-item:last-child {
+            border-bottom: none;
+        }
+        
+        .file-list-item.touch-active {
+            background-color: #e3f2fd;
+        }
+        
+        .file-item-content {
+            display: flex;
+            align-items: center;
+            flex: 1;
+            min-width: 0;
+        }
+        
+        .file-item-icon {
+            font-size: 24px;
+            margin-right: 15px;
+            flex-shrink: 0;
+        }
+        
+        .folder-item .file-item-icon {
+            color: #3498db;
+        }
+        
+        .paper-item .file-item-icon {
+            color: #27ae60;
+        }
+        
+        .file-item-info {
+            flex: 1;
+            min-width: 0;
+        }
+        
+        .file-item-name {
+            font-size: 16px;
+            font-weight: 500;
+            color: #2c3e50;
+            margin-bottom: 2px;
+            word-break: break-word;
+        }
+        
+        .file-item-type {
+            font-size: 13px;
+            color: #7f8c8d;
+        }
+        
+        .file-item-actions {
+            display: flex;
+            gap: 6px;
+            flex-shrink: 0;
+            opacity: 1;
+            transition: opacity 0.3s ease;
+        }
+        
+        @media (min-width: 769px) {
+            .file-item-actions {
+                opacity: 0;
+            }
+            
+            .file-list-item:hover .file-item-actions {
+                opacity: 1;
+            }
+        }
+        
+        /* 面包屑导航样式 */
+        .breadcrumb-nav {
+            padding: 15px 20px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e8e8e8;
+            font-size: 14px;
+        }
+        
+        .breadcrumb-item {
+            color: #6c757d;
+            cursor: pointer;
+            transition: color 0.3s ease;
+        }
+        
+        .breadcrumb-item:hover {
+            color: #3498db;
+        }
+        
+        .breadcrumb-item.active {
+            color: #2c3e50;
+            font-weight: 500;
+            cursor: default;
+        }
+        
+        .breadcrumb-separator {
+            margin: 0 8px;
+            color: #adb5bd;
+        }
+        
+        /* 头部操作按钮 */
+        .header-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 8px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            padding: 20px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h3 {
+            margin: 0;
+            color: #2c3e50;
+        }
+
+        .modal-body {
+            padding: 20px;
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 20px;
+        }
+
+        /* 分类样式 */
+        .category-list {
+            padding: 10px 0;
+        }
+
+        .category-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 15px;
+            border-bottom: 1px solid #f0f0f0;
+            transition: background-color 0.2s ease;
+        }
+
+        .category-item:hover {
+            background-color: #f8f9fa;
+        }
+
+        .category-item:last-child {
+            border-bottom: none;
+        }
+
+        .category-name {
+            font-size: 14px;
+            color: #2c3e50;
+            font-weight: 500;
+        }
+
+        .category-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn-sm {
+            padding: 4px 8px;
+            font-size: 11px;
+            border-radius: 4px;
+        }
+
+        .category-filter {
+            margin-left: auto;
+        }
+
+        .category-filter .form-input {
+            width: 150px;
+            padding: 8px 12px;
+            font-size: 13px;
+        }
+
+        /* 卡片头部样式 */
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                gap: 15px;
+            }
+            
+            .header div {
+                display: flex;
+                gap: 10px;
+                width: 100%;
+            }
+            
+            .header .btn {
+                flex: 1;
+            }
+            
+            .card-header {
+                flex-direction: column;
+                gap: 15px;
+            }
+            
+            .header-actions {
+                width: 100%;
+                justify-content: stretch;
+            }
+            
+            .header-actions .btn {
+                flex: 1;
+            }
+            
+            .file-list-item {
+                padding: 15px;
+                min-height: 70px;
+            }
+            
+            .file-item-icon {
+                font-size: 28px;
+                margin-right: 12px;
+            }
+            
+            .file-item-name {
+                font-size: 15px;
+            }
+            
+            .file-item-type {
+                font-size: 12px;
+            }
+            
+            .file-item-actions {
+                gap: 8px;
+            }
+            
+            .breadcrumb-nav {
+                padding: 12px 15px;
+                font-size: 13px;
+            }
+            
+            .breadcrumb-separator {
+                margin: 0 6px;
+            }
+            
+            .modal-content {
+                margin: 20px;
+            }
+            
+            .form-actions {
+                flex-direction: column;
+            }
+            
+            .form-actions .btn {
+                width: 100%;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .file-list-item {
+                padding: 12px;
+                min-height: 65px;
+            }
+            
+            .file-item-icon {
+                font-size: 24px;
+                margin-right: 10px;
+            }
+            
+            .file-item-name {
+                font-size: 14px;
+            }
+            
+            .file-item-type {
+                font-size: 11px;
+            }
+            
+            .file-item-actions .btn {
+                padding: 4px 8px;
+                font-size: 11px;
+            }
+        }
+    </style>
+</body>
+</html>
