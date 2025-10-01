@@ -59,11 +59,6 @@ async def auto_parse_page(request: Request, paper_id: int):
 async def preview_page(request: Request, paper_id: int):
     return templates.TemplateResponse("preview.html", {"request": request, "paper_id": paper_id})
 
-# 选择学生页面（用于导出单个学生错题）
-@app.get("/select_student/{paper_id}", response_class=HTMLResponse)
-async def select_student_page(request: Request, paper_id: int):
-    return templates.TemplateResponse("select_student.html", {"request": request, "paper_id": paper_id})
-
 # 导出预览页面
 @app.get("/export_preview/{paper_id}/{student_id}", response_class=HTMLResponse)
 async def export_preview_page(request: Request, paper_id: int, student_id: int):

@@ -140,7 +140,7 @@
             </div>
             <div class="modal-body">
                 <div class="export-options">
-                    <div class="export-option" onclick="goToSelectStudent()">
+                    <div class="export-option" onclick="showStudentSelector()">
                         <div class="export-icon">👤</div>
                         <div class="export-title">单个学生错题</div>
                         <div class="export-desc">选择一个学生，导出其错题Word文档</div>
@@ -150,6 +150,23 @@
                         <div class="export-title">所有学生错题</div>
                         <div class="export-desc">导出所有学生的错题，打包成ZIP文件</div>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 选择学生模态框（全屏样式）-->
+    <div id="student-select-modal" class="modal hidden">
+        <div class="modal-content modal-fullscreen">
+            <div class="modal-header">
+                <h3>👤 选择学生</h3>
+                <button onclick="closeStudentSelectModal()" class="btn btn-secondary">×</button>
+            </div>
+            <div class="modal-body">
+                <div id="export-student-selector"></div>
+                <div class="form-actions" style="margin-top: 20px;">
+                    <button onclick="closeStudentSelectModal()" class="btn btn-secondary">取消</button>
+                    <button onclick="exportSelectedStudent()" class="btn btn-primary">📄 查看导出预览</button>
                 </div>
             </div>
         </div>
@@ -193,6 +210,7 @@
         let paper = null;
         let questions = [];
         let students = [];
+        let exportStudentSelector = null;
         let editImageUploader = null;
         let editStudentSelector = null;
         let editingQuestion = null;
@@ -486,9 +504,40 @@
             document.getElementById('export-modal').classList.remove('hidden');
         }
 
-        // 跳转到选择学生页面
-        function goToSelectStudent() {
-            Utils.redirect(`/select_student/${paperId}`);
+        // 显示学生选择模态框
+        function showStudentSelector() {
+            // 关闭导出选项模态框
+            closeExportModal();
+            
+            // 初始化学生选择器（如果还未初始化）
+            if (!exportStudentSelector) {
+                const container = document.getElementById('export-student-selector');
+                exportStudentSelector = new StudentSelector(container, {
+                    multiple: false,
+                    searchable: true
+                });
+            }
+            
+            // 显示学生选择模态框
+            document.getElementById('student-select-modal').classList.remove('hidden');
+        }
+
+        // 关闭学生选择模态框
+        function closeStudentSelectModal() {
+            document.getElementById('student-select-modal').classList.add('hidden');
+        }
+
+        // 导出选中学生的错题
+        async function exportSelectedStudent() {
+            const selectedStudents = exportStudentSelector.getSelectedStudents();
+            if (selectedStudents.length === 0) {
+                Utils.showError('请选择一个学生');
+                return;
+            }
+
+            const studentId = selectedStudents[0];
+            // 跳转到导出预览页面
+            Utils.redirect(`/export_preview/${paperId}/${studentId}`);
         }
 
         // 导出所有学生错题
@@ -1022,6 +1071,34 @@
             width: 90%;
             max-height: 90vh;
             overflow-y: auto;
+        }
+
+        /* 全屏模态框样式 */
+        .modal-fullscreen {
+            max-width: 800px;
+            width: 95%;
+            max-height: 95vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .modal-fullscreen .modal-header {
+            flex-shrink: 0;
+        }
+
+        .modal-fullscreen .modal-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        /* 学生选择器在全屏模态框中的样式 */
+        #export-student-selector {
+            min-height: 500px;
+        }
+
+        #export-student-selector .student-list {
+            max-height: 500px;
         }
 
         .modal-header {
