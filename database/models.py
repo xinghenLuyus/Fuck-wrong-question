@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, Text, ForeignKey
+from sqlalchemy import create_engine, Column, Integer, String, Text, ForeignKey, UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 import sqlite3
@@ -56,9 +56,14 @@ class Student(Base):
     __tablename__ = "students"
     
     id = Column(Integer, primary_key=True, index=True)
-    class_name = Column(String, nullable=False)  # 班级
-    student_no = Column(String, nullable=False, unique=True)  # 学号
+    class_name = Column(String, nullable=False, index=True)  # 班级
+    student_no = Column(String, nullable=False, index=True)  # 学号（班级内唯一）
     name = Column(String, nullable=False)  # 姓名
+    
+    # 复合唯一约束：班级+学号的组合必须唯一
+    __table_args__ = (
+        UniqueConstraint('class_name', 'student_no', name='uq_class_student_no'),
+    )
 
 def create_tables():
     """创建所有数据表"""

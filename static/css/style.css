@@ -386,3 +386,437 @@ body {
 .hidden {
     display: none !important;
 }
+
+/* 微信标签式学生选择器样式 */
+.student-selector-wrapper {
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 15px;
+    background: #fff;
+}
+
+.selected-students-area {
+    min-height: 60px;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 6px;
+    margin-bottom: 15px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+.no-selection-hint {
+    color: #999;
+    font-size: 14px;
+    font-style: italic;
+}
+
+.student-tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 10px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 16px;
+    font-size: 13px;
+    position: relative;
+    transition: all 0.2s;
+}
+
+.student-tag:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+}
+
+.student-tag-text {
+    margin-right: 6px;
+}
+
+.student-tag-remove {
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    padding: 0 4px;
+    border-radius: 50%;
+    transition: background 0.2s;
+}
+
+.student-tag-remove:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.student-selector-filters {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.filter-select {
+    flex: 0 0 150px; /* 固定宽度150px */
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+.filter-input {
+    flex: 1; /* 占据剩余空间 */
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+.filter-input:focus, .filter-select:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.student-list {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    background: #fff;
+}
+
+.student-list-item {
+    display: flex;
+    align-items: center;
+    padding: 10px 12px;
+    border-bottom: 1px solid #f0f0f0;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    user-select: none; /* 防止拖选文字 */
+}
+
+.student-list-item:last-child {
+    border-bottom: none;
+}
+
+.student-list-item:hover {
+    background: #f8f9fa;
+    transform: translateX(2px); /* 轻微移动增强交互感 */
+}
+
+.student-list-item.selected {
+    background: #e7f3ff;
+    border-left: 3px solid #667eea; /* 增加左侧高亮边框 */
+    padding-left: 9px; /* 补偿边框占用的空间 */
+}
+
+.student-list-item.selected:hover {
+    background: #d6eaff;
+}
+
+.student-checkbox {
+    margin-right: 10px;
+    cursor: pointer;
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0; /* 防止复选框被压缩 */
+}
+
+.student-info {
+    display: flex;
+    align-items: center;
+    flex: 1;
+}
+
+.student-name {
+    font-weight: 500;
+    color: #2c3e50;
+    margin-right: 8px;
+}
+
+.student-details {
+    color: #7f8c8d;
+    font-size: 12px;
+}
+
+.no-students-hint {
+    padding: 40px;
+    text-align: center;
+    color: #999;
+    font-size: 14px;
+}
+
+/* 题目列表中的错题学生显示样式（浮动红色标签） */
+.wrong-students-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.wrong-student-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    color: white;
+    border-radius: 12px;
+    font-size: 12px;
+    position: relative;
+    transition: all 0.2s;
+    cursor: default;
+}
+
+.wrong-student-badge:hover {
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(245, 87, 108, 0.4);
+}
+
+.wrong-student-badge:hover .badge-remove {
+    opacity: 1;
+}
+
+.badge-remove {
+    margin-left: 6px;
+    opacity: 0;
+    font-size: 14px;
+    cursor: pointer;
+    transition: opacity 0.2s;
+    padding: 0 2px;
+    border-radius: 50%;
+}
+
+.badge-remove:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* 滚动条美化 */
+.student-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.student-list::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 10px;
+}
+
+.student-list::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 10px;
+}
+
+.student-list::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+/* 图片上传器样式增强 */
+.preview-item {
+    position: relative;
+    display: inline-block;
+    margin: 10px;
+}
+
+.preview-actions {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    display: flex;
+    gap: 5px;
+    background: rgba(0, 0, 0, 0.7);
+    border-radius: 4px;
+    padding: 2px;
+}
+
+.preview-edit, .preview-remove {
+    background: none;
+    border: none;
+    color: white;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 3px;
+    font-size: 12px;
+    transition: background-color 0.2s;
+}
+
+.preview-edit:hover {
+    background: rgba(52, 152, 219, 0.8);
+}
+
+.preview-remove:hover {
+    background: rgba(231, 76, 60, 0.8);
+}
+
+/* 图片编辑器模态框 */
+.image-edit-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 2000;
+}
+
+.image-edit-content {
+    background: white;
+    border-radius: 8px;
+    max-width: 90vw;
+    max-height: 90vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.image-edit-header {
+    padding: 15px 20px;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #f8f9fa;
+}
+
+.image-edit-header h3 {
+    margin: 0;
+    color: #2c3e50;
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #7f8c8d;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.close-btn:hover {
+    background: rgba(231, 76, 60, 0.1);
+    color: #e74c3c;
+}
+
+.image-edit-body {
+    display: flex;
+    flex: 1;
+    min-height: 400px;
+}
+
+.image-edit-container {
+    flex: 2;
+    padding: 20px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: #f8f9fa;
+}
+
+#edit-canvas {
+    max-width: 100%;
+    max-height: 100%;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    cursor: default;
+}
+
+.image-edit-controls {
+    flex: 1;
+    padding: 20px;
+    border-left: 1px solid #eee;
+    background: white;
+    min-width: 200px;
+}
+
+.control-group {
+    margin-bottom: 20px;
+}
+
+.control-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: #2c3e50;
+    font-size: 14px;
+}
+
+.control-group .btn {
+    margin-right: 5px;
+    margin-bottom: 5px;
+    padding: 6px 12px;
+    font-size: 12px;
+}
+
+#scale-slider {
+    width: 100%;
+    margin-bottom: 5px;
+}
+
+#scale-value {
+    font-size: 12px;
+    color: #7f8c8d;
+}
+
+.image-edit-footer {
+    padding: 15px 20px;
+    border-top: 1px solid #eee;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    background: #f8f9fa;
+}
+
+/* 添加题目页面样式增强 */
+.image-editor-note {
+    margin-top: 10px;
+    padding: 15px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 8px;
+    color: white;
+}
+
+.image-editor-note p {
+    margin: 0 0 10px 0;
+    font-weight: 600;
+}
+
+.image-editor-note ul {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.image-editor-note li {
+    margin-bottom: 5px;
+    font-size: 14px;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .image-edit-body {
+        flex-direction: column;
+    }
+    
+    .image-edit-container {
+        flex: none;
+        height: 300px;
+    }
+    
+    .image-edit-controls {
+        border-left: none;
+        border-top: 1px solid #eee;
+    }
+    
+    .image-edit-footer {
+        flex-direction: column;
+    }
+    
+    .image-edit-footer .btn {
+        width: 100%;
+        margin-bottom: 10px;
+    }
+}

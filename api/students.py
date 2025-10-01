@@ -28,10 +28,13 @@ class StudentResponse(BaseModel):
 @router.post("/", response_model=StudentResponse)
 async def create_student(student: StudentCreate, db: Session = Depends(get_db)):
     """创建新学生"""
-    # 检查学号是否已存在
-    existing_student = db.query(Student).filter(Student.student_no == student.student_no).first()
+    # 检查学号在该班级是否已存在
+    existing_student = db.query(Student).filter(
+        Student.class_name == student.class_name,
+        Student.student_no == student.student_no
+    ).first()
     if existing_student:
-        raise HTTPException(status_code=400, detail="学号已存在")
+        raise HTTPException(status_code=400, detail=f"学号 {student.student_no} 在班级 {student.class_name} 中已存在")
     
     db_student = Student(
         class_name=student.class_name,
@@ -85,11 +88,20 @@ async def update_student(student_id: int, student_update: StudentUpdate, db: Ses
     if not student:
         raise HTTPException(status_code=404, detail="学生不存在")
     
-    # 检查学号是否重复（如果要修改学号）
-    if student_update.student_no and student_update.student_no != student.student_no:
-        existing = db.query(Student).filter(Student.student_no == student_update.student_no).first()
+    # 确定要检查的班级和学号
+    check_class = student_update.class_name if student_update.class_name is not None else student.class_name
+    check_no = student_update.student_no if student_update.student_no is not None else student.student_no
+    
+    # 检查学号在班级内是否重复（排除当前学生）
+    if (student_update.student_no and student_update.student_no != student.student_no) or \
+       (student_update.class_name and student_update.class_name != student.class_name):
+        existing = db.query(Student).filter(
+            Student.class_name == check_class,
+            Student.student_no == check_no,
+            Student.id != student_id
+        ).first()
         if existing:
-            raise HTTPException(status_code=400, detail="学号已存在")
+            raise HTTPException(status_code=400, detail=f"学号 {check_no} 在班级 {check_class} 中已存在")
     
     if student_update.class_name is not None:
         student.class_name = student_update.class_name

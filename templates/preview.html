@@ -5,6 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>试卷预览 - 错题管理系统</title>
     <link rel="stylesheet" href="/static/css/style.css">
+    <!-- 拼音库 -->
+    <script>
+        (function() {
+            const cdns = [
+                'https://cdn.jsdelivr.net/npm/pinyin-pro@3.19.6/dist/index.js',
+                'https://unpkg.com/pinyin-pro@3.19.6/dist/index.js'
+            ];
+            let loaded = false, currentIndex = 0;
+            function loadNextCDN() {
+                if (loaded || currentIndex >= cdns.length) return;
+                const script = document.createElement('script');
+                script.src = cdns[currentIndex];
+                script.onload = () => { loaded = true; console.log('✅ pinyin-pro 库加载成功'); };
+                script.onerror = () => { currentIndex++; loadNextCDN(); };
+                document.head.appendChild(script);
+            }
+            loadNextCDN();
+        })();
+    </script>
 </head>
 <body>
     <div class="container">
@@ -12,7 +31,7 @@
             <h1>👁️ 试卷预览</h1>
             <div>
                 <a href="/" class="btn btn-secondary">← 返回首页</a>
-                <button onclick="toggleExportSettings()" class="btn btn-info">⚙️ 导出设置</button>
+                <button id="export-settings-toggle" onclick="toggleExportSettings()" class="btn btn-info">⚙️ 导出设置</button>
                 <button onclick="addQuestion()" class="btn btn-success">➕ 添加题目</button>
                 <button onclick="showExportModal()" class="btn btn-primary">📤 导出</button>
             </div>
@@ -38,7 +57,7 @@
                         </div>
                         <div class="form-group">
                             <label>题号字体大小</label>
-                            <input type="number" id="question-number-size" min="12" max="24" value="14">
+                            <input type="number" id="question-number-size" min="12" max="24" value="12">
                         </div>
                         <div class="form-group">
                             <label>正文字体大小</label>
@@ -121,7 +140,7 @@
             </div>
             <div class="modal-body">
                 <div class="export-options">
-                    <div class="export-option" onclick="showStudentSelector()">
+                    <div class="export-option" onclick="goToSelectStudent()">
                         <div class="export-icon">👤</div>
                         <div class="export-title">单个学生错题</div>
                         <div class="export-desc">选择一个学生，导出其错题Word文档</div>
@@ -130,18 +149,6 @@
                         <div class="export-icon">👥</div>
                         <div class="export-title">所有学生错题</div>
                         <div class="export-desc">导出所有学生的错题，打包成ZIP文件</div>
-                    </div>
-                </div>
-
-                <!-- 学生选择器 -->
-                <div id="student-selector-container" class="hidden">
-                    <div class="form-group">
-                        <label class="form-label">选择学生</label>
-                        <div id="export-student-selector"></div>
-                    </div>
-                    <div class="form-actions">
-                        <button onclick="closeExportModal()" class="btn btn-secondary">取消</button>
-                        <button onclick="exportSelectedStudent()" class="btn btn-primary">导出Word</button>
                     </div>
                 </div>
             </div>
@@ -186,7 +193,6 @@
         let paper = null;
         let questions = [];
         let students = [];
-        let exportStudentSelector = null;
         let editImageUploader = null;
         let editStudentSelector = null;
         let editingQuestion = null;
@@ -221,6 +227,9 @@
 
                 renderPaperInfo();
                 renderQuestions();
+                
+                // 自动加载导出设置并显示面板
+                await autoLoadExportSettings();
             } catch (error) {
                 Utils.showError('加载数据失败: ' + error.message);
                 Utils.redirect('/');
@@ -331,12 +340,24 @@
                             
                             <div class="wrong-students">
                                 <span class="wrong-students-label">错题学生：</span>
+                                <div class="wrong-students-tags">
                                 ${wrongStudents.length > 0 ? 
                                     wrongStudents.map(student => `
-                                        <span class="student-tag">${student.name} (${student.student_no})</span>
+                                        <span class="wrong-student-badge" 
+                                              data-question-id="${question.id}" 
+                                              data-student-id="${student.id}" 
+                                              title="${student.name}（${student.class_name}-${student.student_no}）- 点击查看该学生错题"
+                                              onclick="viewStudentExport(${student.id})"
+                                              style="cursor: pointer;">
+                                            ${student.name}
+                                            <span class="badge-remove" 
+                                                  onclick="event.stopPropagation(); removeWrongStudent(${question.id}, ${student.id});"
+                                                  title="移除该学生">×</span>
+                                        </span>
                                     `).join('') :
                                     '<span class="no-wrong-students">暂无</span>'
                                 }
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -354,7 +375,14 @@
                 .map(id => parseInt(id.trim()))
                 .filter(id => !isNaN(id));
             
-            return students.filter(student => studentIds.includes(student.id));
+            const result = students.filter(student => studentIds.includes(student.id));
+            
+            // 调试信息
+            if (result.length > 0) {
+                console.log('错题学生信息:', result);
+            }
+            
+            return result;
         }
 
         // 显示试卷导出设置
@@ -424,42 +452,49 @@
             }
         }
 
+        // 移除错题学生
+        async function removeWrongStudent(questionId, studentId) {
+            const question = questions.find(q => q.id === questionId);
+            if (!question) return;
+            
+            // 获取当前错题学生列表
+            const currentStudents = question.wrong_students ? 
+                question.wrong_students.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) : 
+                [];
+            
+            // 移除指定学生
+            const updatedStudents = currentStudents.filter(id => id !== studentId);
+            
+            try {
+                await Utils.put(`/api/questions/${questionId}`, {
+                    wrong_students: updatedStudents.join(',')
+                });
+                Utils.showSuccess('已移除该学生');
+                loadData(); // 重新加载数据
+            } catch (error) {
+                Utils.showError('移除失败: ' + error.message);
+            }
+        }
+
+        // 查看学生的导出预览
+        function viewStudentExport(studentId) {
+            Utils.redirect(`/export_preview/${paperId}/${studentId}`);
+        }
+
         // 显示导出模态框
         function showExportModal() {
             document.getElementById('export-modal').classList.remove('hidden');
-            document.getElementById('student-selector-container').classList.add('hidden');
         }
 
-        // 显示学生选择器
-        function showStudentSelector() {
-            if (!exportStudentSelector) {
-                const container = document.getElementById('export-student-selector');
-                exportStudentSelector = new StudentSelector(container, {
-                    multiple: false,
-                    searchable: true
-                });
-            }
-            
-            document.getElementById('student-selector-container').classList.remove('hidden');
-        }
-
-        // 导出选中学生的错题
-        async function exportSelectedStudent() {
-            const selectedStudents = exportStudentSelector.getSelectedStudents();
-            if (selectedStudents.length === 0) {
-                Utils.showError('请选择一个学生');
-                return;
-            }
-
-            const studentId = selectedStudents[0];
-            const student = students.find(s => s.id === studentId);
-            
-            // 跳转到预览页面
-            Utils.redirect(`/export_preview/${paperId}/${studentId}`);
+        // 跳转到选择学生页面
+        function goToSelectStudent() {
+            Utils.redirect(`/select_student/${paperId}`);
         }
 
         // 导出所有学生错题
         async function exportAllStudents() {
+            closeExportModal();
+            
             if (!Utils.confirm('确定要导出所有学生的错题吗？这可能需要一些时间。')) {
                 return;
             }
@@ -485,7 +520,6 @@
         // 关闭导出模态框
         function closeExportModal() {
             document.getElementById('export-modal').classList.add('hidden');
-            document.getElementById('student-selector-container').classList.add('hidden');
         }
 
         // 关闭编辑模态框
@@ -498,6 +532,29 @@
         let exportSettingsVisible = false;
         let currentSettings = null; // 存储当前完整设置
 
+        // 自动加载导出设置（页面加载时调用）
+        async function autoLoadExportSettings() {
+            try {
+                // 仅加载导出设置，不显示面板
+                await loadExportSettings();
+                
+                console.log('✅ 导出设置已自动加载');
+            } catch (error) {
+                console.warn('⚠️ 自动加载导出设置失败:', error.message);
+                // 不显示错误给用户，因为这不是关键功能
+            }
+        }
+
+        // 更新导出设置按钮文字
+        function updateExportSettingsButtonText() {
+            const button = document.getElementById('export-settings-toggle');
+            if (exportSettingsVisible) {
+                button.innerHTML = '⚙️ 隐藏设置';
+            } else {
+                button.innerHTML = '⚙️ 导出设置';
+            }
+        }
+
         // 切换导出设置面板显示
         async function toggleExportSettings() {
             const panel = document.getElementById('export-settings-panel');
@@ -506,28 +563,33 @@
                 panel.classList.add('hidden');
                 exportSettingsVisible = false;
             } else {
-                // 加载当前设置
-                await loadExportSettings();
+                // 如果设置还没加载过，先加载
+                if (!currentSettings) {
+                    await loadExportSettings();
+                }
                 panel.classList.remove('hidden');
                 exportSettingsVisible = true;
             }
+            
+            // 更新按钮文字
+            updateExportSettingsButtonText();
         }
 
         // 加载导出设置
         async function loadExportSettings() {
             try {
                 const settings = await Utils.get(`/api/export/settings/${paperId}`);
-                currentSettings = settings;
+                currentSettings = normalizeSettings(settings);
                 
                 // 填充全局设置表单
-                document.getElementById('title-size').value = settings.title_size || 16;
-                document.getElementById('question-number-size').value = settings.question_number_size || 14;
-                document.getElementById('text-size').value = settings.text_size || 12;
-                document.getElementById('image-scale').value = settings.image_scale || 1.0;
-                document.getElementById('image-width').value = settings.image_width || 5.0;
-                document.getElementById('question-spacing').value = settings.question_spacing || 0;
-                document.getElementById('show-student-info').checked = settings.show_student_info !== false;
-                document.getElementById('show-question-text').checked = settings.show_question_text !== false;
+                document.getElementById('title-size').value = currentSettings.title_size || 16;
+                document.getElementById('question-number-size').value = currentSettings.question_number_size || 12;
+                document.getElementById('text-size').value = currentSettings.text_size || 12;
+                document.getElementById('image-scale').value = currentSettings.image_scale || 1.0;
+                document.getElementById('image-width').value = currentSettings.image_width || 5.0;
+                document.getElementById('question-spacing').value = currentSettings.question_spacing || 0;
+                document.getElementById('show-student-info').checked = currentSettings.show_student_info !== false;
+                document.getElementById('show-question-text').checked = currentSettings.show_question_text !== false;
                 
                 // 加载所有单题设置
                 loadAllQuestionSettings();
@@ -581,11 +643,11 @@
                 const element = document.getElementById(`q${questionId}-${fieldName}`);
                 if (element) {
                     if (element.type === 'checkbox') {
-                        element.checked = value !== undefined ? value : currentSettings[fieldName.replace('-', '_')] !== false;
+                        element.checked = value !== undefined ? value : currentSettings[fieldName.replace(/-/g, '_')] !== false;
                         element.indeterminate = value === undefined;
                     } else {
                         element.value = value !== undefined ? value : '';
-                        element.placeholder = `继承全局(${currentSettings[fieldName.replace('-', '_')] || '默认'})`;
+                        element.placeholder = `继承全局(${currentSettings[fieldName.replace(/-/g, '_')] || '默认'})`;
                     }
                 }
             };
@@ -629,7 +691,7 @@
                 fields.forEach(field => {
                     const value = getValue(field);
                     if (value !== undefined) {
-                        questionOverride[field.replace('-', '_')] = value;
+                        questionOverride[field.replace(/-/g, '_')] = value;
                     }
                 });
 
@@ -689,6 +751,30 @@
             return question ? question.question_no : questionId;
         }
 
+        // 规范化设置对象中的字段名（处理可能的格式错误）
+        function normalizeSettings(settings) {
+            const normalized = { ...settings };
+            
+            // 修复可能的字段名错误
+            if (normalized['question_number-size'] && !normalized['question_number_size']) {
+                normalized['question_number_size'] = normalized['question_number-size'];
+                delete normalized['question_number-size'];
+            }
+            
+            // 处理question_overrides中的字段名错误
+            if (normalized.question_overrides) {
+                Object.keys(normalized.question_overrides).forEach(qid => {
+                    const override = normalized.question_overrides[qid];
+                    if (override['question_number-size'] && !override['question_number_size']) {
+                        override['question_number_size'] = override['question_number-size'];
+                        delete override['question_number-size'];
+                    }
+                });
+            }
+            
+            return normalized;
+        }
+
         // 更新单题预览
         function updateQuestionPreview(questionId) {
             if (!currentSettings) return;
@@ -717,12 +803,12 @@
             fields.forEach(field => {
                 const value = getValue(field);
                 if (value !== undefined) {
-                    questionOverride[field.replace('-', '_')] = value;
+                    questionOverride[field.replace(/-/g, '_')] = value;
                 }
             });
             
             // 合并设置
-            const effectiveSettings = { ...currentSettings, ...questionOverride };
+            const effectiveSettings = normalizeSettings({ ...currentSettings, ...questionOverride });
             
             // 生成预览HTML
             const previewHtml = generateQuestionPreviewHtml(question, effectiveSettings);
@@ -736,7 +822,7 @@
 
         // 生成题目预览HTML
         function generateQuestionPreviewHtml(question, settings) {
-            const questionNumberSize = settings.question_number_size || 14;
+            const questionNumberSize = settings.question_number_size || 12;
             const textSize = settings.text_size || 12;
             const imageScale = settings.image_scale || 1.0;
             const imageWidth = (settings.image_width || 5.0) * imageScale;
@@ -840,7 +926,7 @@
             }
 
             document.getElementById('title-size').value = 16;
-            document.getElementById('question-number-size').value = 14;
+            document.getElementById('question-number-size').value = 12;
             document.getElementById('text-size').value = 12;
             document.getElementById('image-scale').value = 1.0;
             document.getElementById('image-width').value = 5.0;
@@ -851,7 +937,7 @@
             // 重置所有单题设置
             currentSettings = {
                 title_size: 16,
-                question_number_size: 14,
+                question_number_size: 12,
                 text_size: 12,
                 line_spacing: 1.5,
                 image_scale: 1.0,
@@ -1265,30 +1351,66 @@
             font-weight: 600;
             color: #c0392b;
             font-size: 14px;
+            margin-right: 10px;
+        }
+
+        .wrong-students-tags {
+            display: inline-flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
+        .wrong-student-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 6px 12px;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            border-radius: 16px;
+            font-size: 13px;
+            font-weight: 500;
+            position: relative;
+            transition: all 0.2s;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(245, 87, 108, 0.3);
+        }
+
+        .wrong-student-badge:hover {
+            transform: scale(1.08) translateY(-2px);
+            box-shadow: 0 6px 16px rgba(245, 87, 108, 0.5);
+        }
+
+        .wrong-student-badge:active {
+            transform: scale(1.02);
+        }
+
+        .wrong-student-badge:hover .badge-remove {
+            opacity: 1;
+        }
+
+        .badge-remove {
+            margin-left: 6px;
+            opacity: 0;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: opacity 0.2s;
+            padding: 0 4px;
+            border-radius: 50%;
+            line-height: 1;
+            z-index: 10;
+        }
+
+        .badge-remove:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: scale(1.2);
         }
 
         .no-wrong-students {
             color: #27ae60;
             font-style: italic;
             font-size: 14px;
-        }
-
-        .student-tag {
-            display: inline-block;
-            background: linear-gradient(135deg, #ff6b6b, #ee5a52);
-            color: white;
-            padding: 6px 12px;
-            border-radius: 20px;
-            margin: 3px;
-            font-size: 12px;
-            font-weight: 500;
-            box-shadow: 0 2px 8px rgba(238, 90, 82, 0.3);
-            transition: all 0.2s ease;
-        }
-
-        .student-tag:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(238, 90, 82, 0.4);
         }
 
         /* 导出选项样式 */

@@ -85,7 +85,7 @@ class ExportRequest(BaseModel):
 class ExportSettings(BaseModel):
     # 文档样式
     title_size: int = 16
-    question_number_size: int = 14
+    question_number_size: int = 12
     text_size: int = 12
     line_spacing: float = 1.5
     
@@ -363,7 +363,7 @@ async def get_export_settings(paper_id: int):
         # 返回默认设置
         return {
             "title_size": 16,
-            "question_number_size": 14,
+            "question_number_size": 12,
             "text_size": 12,
             "line_spacing": 1.5,
             "image_scale": 1.0,

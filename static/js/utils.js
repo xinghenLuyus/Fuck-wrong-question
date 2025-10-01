@@ -340,18 +340,26 @@ class ImageUploader {
         const previewItem = document.createElement('div');
         previewItem.className = 'preview-item';
         
-        const deleteButtonText = isExisting ? '×' : '×';
+        const deleteButtonText = '×';
         const imageClass = isExisting ? 'preview-image existing' : 'preview-image';
         
         previewItem.innerHTML = `
             <img src="${fileData.url}" alt="${fileData.filename}" class="${imageClass}">
-            <button type="button" class="preview-remove" data-filename="${fileData.filename}">${deleteButtonText}</button>
+            <div class="preview-actions">
+                <button type="button" class="preview-edit" data-filename="${fileData.filename}" title="编辑图片">✂️</button>
+                <button type="button" class="preview-remove" data-filename="${fileData.filename}" title="删除图片">${deleteButtonText}</button>
+            </div>
         `;
 
         const removeBtn = previewItem.querySelector('.preview-remove');
         removeBtn.addEventListener('click', () => {
             this.removeFile(fileData.filename);
             previewItem.remove();
+        });
+
+        const editBtn = previewItem.querySelector('.preview-edit');
+        editBtn.addEventListener('click', () => {
+            this.editImage(fileData);
         });
 
         this.previewArea.appendChild(previewItem);
@@ -419,9 +427,237 @@ class ImageUploader {
             this.options.onChange(this.files);
         }
     }
+
+    // 编辑图片
+    editImage(fileData) {
+        // 创建图片编辑模态框
+        const modal = document.createElement('div');
+        modal.className = 'image-edit-modal';
+        modal.innerHTML = `
+            <div class="image-edit-content">
+                <div class="image-edit-header">
+                    <h3>编辑图片</h3>
+                    <button class="close-btn" onclick="this.closest('.image-edit-modal').remove()">×</button>
+                </div>
+                <div class="image-edit-body">
+                    <div class="image-edit-container">
+                        <canvas id="edit-canvas"></canvas>
+                    </div>
+                    <div class="image-edit-controls">
+                        <div class="control-group">
+                            <label>裁剪工具:</label>
+                            <button id="crop-btn" class="btn btn-primary">开始裁剪</button>
+                            <button id="reset-btn" class="btn btn-secondary">重置</button>
+                        </div>
+                        <div class="control-group">
+                            <label>旋转:</label>
+                            <button id="rotate-left" class="btn btn-secondary">↺ 左转90°</button>
+                            <button id="rotate-right" class="btn btn-secondary">↻ 右转90°</button>
+                        </div>
+                        <div class="control-group">
+                            <label>缩放:</label>
+                            <input type="range" id="scale-slider" min="0.1" max="3" step="0.1" value="1">
+                            <span id="scale-value">100%</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="image-edit-footer">
+                    <button id="save-edit" class="btn btn-success">保存修改</button>
+                    <button onclick="this.closest('.image-edit-modal').remove()" class="btn btn-secondary">取消</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+        
+        // 初始化图片编辑器
+        this.initImageEditor(modal, fileData);
+    }
+
+    // 初始化图片编辑器
+    initImageEditor(modal, fileData) {
+        const canvas = modal.querySelector('#edit-canvas');
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+        
+        let currentRotation = 0;
+        let currentScale = 1;
+        let isCropping = false;
+        let cropStart = null;
+        let cropEnd = null;
+        
+        img.onload = () => {
+            canvas.width = Math.min(img.width, 600);
+            canvas.height = (canvas.width / img.width) * img.height;
+            this.drawImage(ctx, img, canvas, currentRotation, currentScale);
+        };
+        
+        img.src = fileData.url;
+
+        // 绑定控制事件
+        modal.querySelector('#crop-btn').addEventListener('click', () => {
+            isCropping = !isCropping;
+            modal.querySelector('#crop-btn').textContent = isCropping ? '完成裁剪' : '开始裁剪';
+            canvas.style.cursor = isCropping ? 'crosshair' : 'default';
+        });
+
+        modal.querySelector('#reset-btn').addEventListener('click', () => {
+            currentRotation = 0;
+            currentScale = 1;
+            isCropping = false;
+            cropStart = null;
+            cropEnd = null;
+            modal.querySelector('#scale-slider').value = 1;
+            modal.querySelector('#scale-value').textContent = '100%';
+            modal.querySelector('#crop-btn').textContent = '开始裁剪';
+            canvas.style.cursor = 'default';
+            this.drawImage(ctx, img, canvas, currentRotation, currentScale);
+        });
+
+        modal.querySelector('#rotate-left').addEventListener('click', () => {
+            currentRotation = (currentRotation - 90) % 360;
+            this.drawImage(ctx, img, canvas, currentRotation, currentScale);
+        });
+
+        modal.querySelector('#rotate-right').addEventListener('click', () => {
+            currentRotation = (currentRotation + 90) % 360;
+            this.drawImage(ctx, img, canvas, currentRotation, currentScale);
+        });
+
+        modal.querySelector('#scale-slider').addEventListener('input', (e) => {
+            currentScale = parseFloat(e.target.value);
+            modal.querySelector('#scale-value').textContent = Math.round(currentScale * 100) + '%';
+            this.drawImage(ctx, img, canvas, currentRotation, currentScale);
+        });
+
+        // 裁剪功能
+        canvas.addEventListener('mousedown', (e) => {
+            if (!isCropping) return;
+            const rect = canvas.getBoundingClientRect();
+            cropStart = {
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top
+            };
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (!isCropping || !cropStart) return;
+            const rect = canvas.getBoundingClientRect();
+            cropEnd = {
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top
+            };
+            this.drawImage(ctx, img, canvas, currentRotation, currentScale);
+            this.drawCropRect(ctx, cropStart, cropEnd);
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            if (!isCropping) return;
+            // 裁剪逻辑在保存时处理
+        });
+
+        // 保存编辑
+        modal.querySelector('#save-edit').addEventListener('click', async () => {
+            try {
+                const editedImageBlob = await this.getEditedImage(canvas, img, currentRotation, currentScale, cropStart, cropEnd);
+                const editedFile = new File([editedImageBlob], fileData.filename, { type: 'image/png' });
+                
+                // 上传编辑后的图片
+                const result = await Utils.uploadFile(editedFile);
+                
+                // 更新文件数据
+                const fileIndex = this.files.findIndex(f => f.filename === fileData.filename);
+                if (fileIndex !== -1) {
+                    this.files[fileIndex] = result;
+                    // 更新预览
+                    const previewItem = this.previewArea.querySelector(`[data-filename="${fileData.filename}"]`).closest('.preview-item');
+                    const img = previewItem.querySelector('img');
+                    img.src = result.url;
+                }
+                
+                Utils.showSuccess('图片编辑完成');
+                modal.remove();
+                
+                if (this.options.onChange) {
+                    this.options.onChange(this.files);
+                }
+            } catch (error) {
+                Utils.showError('保存编辑失败: ' + error.message);
+            }
+        });
+    }
+
+    // 绘制图片
+    drawImage(ctx, img, canvas, rotation, scale) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.save();
+        
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        ctx.rotate((rotation * Math.PI) / 180);
+        ctx.scale(scale, scale);
+        
+        const drawWidth = canvas.width / scale;
+        const drawHeight = canvas.height / scale;
+        
+        ctx.drawImage(img, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+        ctx.restore();
+    }
+
+    // 绘制裁剪框
+    drawCropRect(ctx, start, end) {
+        if (!start || !end) return;
+        
+        ctx.strokeStyle = '#3498db';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        
+        const width = end.x - start.x;
+        const height = end.y - start.y;
+        
+        ctx.strokeRect(start.x, start.y, width, height);
+        ctx.setLineDash([]);
+    }
+
+    // 获取编辑后的图片
+    async getEditedImage(canvas, img, rotation, scale, cropStart, cropEnd) {
+        const editCanvas = document.createElement('canvas');
+        const editCtx = editCanvas.getContext('2d');
+        
+        let finalWidth = canvas.width;
+        let finalHeight = canvas.height;
+        
+        // 如果有裁剪，调整画布大小
+        if (cropStart && cropEnd) {
+            finalWidth = Math.abs(cropEnd.x - cropStart.x);
+            finalHeight = Math.abs(cropEnd.y - cropStart.y);
+        }
+        
+        editCanvas.width = finalWidth;
+        editCanvas.height = finalHeight;
+        
+        if (cropStart && cropEnd) {
+            // 裁剪模式
+            editCtx.drawImage(canvas, 
+                Math.min(cropStart.x, cropEnd.x), 
+                Math.min(cropStart.y, cropEnd.y),
+                finalWidth, 
+                finalHeight,
+                0, 0, 
+                finalWidth, 
+                finalHeight
+            );
+        } else {
+            // 全图模式
+            editCtx.drawImage(canvas, 0, 0);
+        }
+        
+        return new Promise(resolve => {
+            editCanvas.toBlob(resolve, 'image/png');
+        });
+    }
 }
 
-// 学生选择器组件
+// 学生选择器组件（微信标签式）
 class StudentSelector {
     constructor(container, options = {}) {
         this.container = container;
@@ -450,55 +686,139 @@ class StudentSelector {
     }
 
     render() {
-        let html = '';
+        let html = '<div class="student-selector-wrapper">';
         
+        // 已选择的学生标签区域
+        html += '<div class="selected-students-area">';
+        if (this.selectedStudents.length > 0) {
+            this.selectedStudents.forEach(studentId => {
+                const student = this.students.find(s => s.id === studentId);
+                if (student) {
+                    html += `
+                        <div class="student-tag" data-student-id="${student.id}">
+                            <span class="student-tag-text">${student.name}（${student.class_name}-${student.student_no}）</span>
+                            <span class="student-tag-remove" data-student-id="${student.id}">×</span>
+                        </div>
+                    `;
+                }
+            });
+        } else {
+            html += '<div class="no-selection-hint">请选择学生</div>';
+        }
+        html += '</div>';
+        
+        // 搜索和筛选区域（先筛选后搜索）
         if (this.options.searchable) {
             html += `
-                <div class="form-group">
-                    <input type="text" class="form-input" placeholder="搜索学生姓名或学号..." id="student-search">
+                <div class="student-selector-filters">
+                    <select class="filter-select" id="class-filter">
+                        <option value="">全部班级</option>
+                    </select>
+                    <input type="text" 
+                           class="filter-input" 
+                           id="student-search" 
+                           placeholder="搜索姓名、学号或拼音...">
                 </div>
             `;
         }
 
-        html += '<div class="student-selector">';
+        // 学生列表区域（增加高度）
+        html += '<div class="student-list" style="max-height: 400px;">';
+        html += '</div>';
         
-        this.students.forEach(student => {
+        html += '</div>';
+        this.container.innerHTML = html;
+        
+        // 填充班级筛选器
+        if (this.options.searchable) {
+            this.renderClassFilter();
+        }
+        
+        // 渲染学生列表
+        this.renderStudentList();
+    }
+
+    renderClassFilter() {
+        const classFilter = this.container.querySelector('#class-filter');
+        if (!classFilter) return;
+        
+        // 获取所有唯一的班级
+        const classes = [...new Set(this.students.map(s => s.class_name))].sort();
+        
+        classes.forEach(className => {
+            const option = document.createElement('option');
+            option.value = className;
+            option.textContent = className;
+            classFilter.appendChild(option);
+        });
+    }
+
+    renderStudentList(filteredStudents = null) {
+        const studentList = this.container.querySelector('.student-list');
+        if (!studentList) return;
+        
+        const studentsToShow = filteredStudents || this.students;
+        
+        let html = '';
+        studentsToShow.forEach(student => {
             const isSelected = this.selectedStudents.includes(student.id);
             html += `
-                <div class="student-item" data-student-id="${student.id}">
+                <div class="student-list-item ${isSelected ? 'selected' : ''}" data-student-id="${student.id}">
                     <input type="${this.options.multiple ? 'checkbox' : 'radio'}" 
                            class="student-checkbox" 
                            value="${student.id}" 
                            ${isSelected ? 'checked' : ''}>
-                    <span>${student.name} (${student.student_no})</span>
+                    <span class="student-info">
+                        <span class="student-name">${student.name}</span>
+                        <span class="student-details">（${student.class_name}-${student.student_no}）</span>
+                    </span>
                 </div>
             `;
         });
         
-        html += '</div>';
-        this.container.innerHTML = html;
+        if (html === '') {
+            html = '<div class="no-students-hint">没有找到匹配的学生</div>';
+        }
+        
+        studentList.innerHTML = html;
     }
 
     bindEvents() {
-        if (this.options.searchable) {
-            const searchInput = this.container.querySelector('#student-search');
-            searchInput.addEventListener('input', Utils.debounce((e) => {
-                this.filterStudents(e.target.value);
-            }, 300));
-        }
+        // 移除已选学生标签
+        this.container.addEventListener('click', (e) => {
+            if (e.target.classList.contains('student-tag-remove')) {
+                const studentId = parseInt(e.target.dataset.studentId);
+                this.removeSelectedStudent(studentId);
+                return;
+            }
+            
+            // 点击整行选中学生（优化体验）
+            const listItem = e.target.closest('.student-list-item');
+            if (listItem && !e.target.classList.contains('student-checkbox')) {
+                const checkbox = listItem.querySelector('.student-checkbox');
+                if (checkbox) {
+                    checkbox.checked = !checkbox.checked;
+                    // 触发 change 事件
+                    const event = new Event('change', { bubbles: true });
+                    checkbox.dispatchEvent(event);
+                }
+            }
+        });
 
+        // 选择/取消选择学生
         this.container.addEventListener('change', (e) => {
             if (e.target.classList.contains('student-checkbox')) {
                 const studentId = parseInt(e.target.value);
                 
                 if (this.options.multiple) {
                     if (e.target.checked) {
-                        this.selectedStudents.push(studentId);
+                        this.addSelectedStudent(studentId);
                     } else {
-                        this.selectedStudents = this.selectedStudents.filter(id => id !== studentId);
+                        this.removeSelectedStudent(studentId);
                     }
                 } else {
                     this.selectedStudents = e.target.checked ? [studentId] : [];
+                    this.render();
                 }
 
                 if (this.options.onChange) {
@@ -506,15 +826,122 @@ class StudentSelector {
                 }
             }
         });
+
+        // 搜索功能
+        const searchInput = this.container.querySelector('#student-search');
+        if (searchInput) {
+            searchInput.addEventListener('input', Utils.debounce((e) => {
+                this.filterStudents();
+            }, 300));
+        }
+
+        // 班级筛选功能
+        const classFilter = this.container.querySelector('#class-filter');
+        if (classFilter) {
+            classFilter.addEventListener('change', () => {
+                this.filterStudents();
+            });
+        }
     }
 
-    filterStudents(searchTerm) {
-        const studentItems = this.container.querySelectorAll('.student-item');
-        studentItems.forEach(item => {
-            const text = item.textContent.toLowerCase();
-            const matches = text.includes(searchTerm.toLowerCase());
-            item.style.display = matches ? 'flex' : 'none';
+    filterStudents() {
+        const searchTerm = this.container.querySelector('#student-search')?.value.toLowerCase() || '';
+        const selectedClass = this.container.querySelector('#class-filter')?.value || '';
+        
+        let filtered = this.students.filter(student => {
+            let matchesSearch = !searchTerm;
+            
+            if (searchTerm) {
+                // 原字符匹配
+                if (student.name.toLowerCase().includes(searchTerm) ||
+                    student.student_no.toLowerCase().includes(searchTerm) ||
+                    student.class_name.toLowerCase().includes(searchTerm)) {
+                    matchesSearch = true;
+                } else if (window.pinyinPro) {
+                    // 拼音匹配
+                    try {
+                        const { pinyin } = window.pinyinPro;
+                        
+                        // 姓名全拼匹配
+                        const namePinyin = pinyin(student.name, { toneType: 'none' }).replace(/\s+/g, '').toLowerCase();
+                        if (namePinyin.includes(searchTerm)) {
+                            matchesSearch = true;
+                        } else {
+                            // 姓名首字母匹配
+                            const nameFirst = pinyin(student.name, { pattern: 'first', toneType: 'none' }).replace(/\s+/g, '').toLowerCase();
+                            if (nameFirst.includes(searchTerm)) {
+                                matchesSearch = true;
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('拼音转换失败:', e);
+                    }
+                }
+            }
+            
+            const matchesClass = !selectedClass || student.class_name === selectedClass;
+            
+            return matchesSearch && matchesClass;
         });
+        
+        this.renderStudentList(filtered);
+    }
+
+    addSelectedStudent(studentId) {
+        if (!this.selectedStudents.includes(studentId)) {
+            this.selectedStudents.push(studentId);
+            this.updateSelectedArea();
+            this.updateStudentListItem(studentId, true);
+        }
+    }
+
+    removeSelectedStudent(studentId) {
+        this.selectedStudents = this.selectedStudents.filter(id => id !== studentId);
+        this.updateSelectedArea();
+        this.updateStudentListItem(studentId, false);
+        
+        if (this.options.onChange) {
+            this.options.onChange(this.selectedStudents);
+        }
+    }
+
+    updateSelectedArea() {
+        const selectedArea = this.container.querySelector('.selected-students-area');
+        if (!selectedArea) return;
+        
+        let html = '';
+        if (this.selectedStudents.length > 0) {
+            this.selectedStudents.forEach(studentId => {
+                const student = this.students.find(s => s.id === studentId);
+                if (student) {
+                    html += `
+                        <div class="student-tag" data-student-id="${student.id}">
+                            <span class="student-tag-text">${student.name}（${student.class_name}-${student.student_no}）</span>
+                            <span class="student-tag-remove" data-student-id="${student.id}">×</span>
+                        </div>
+                    `;
+                }
+            });
+        } else {
+            html = '<div class="no-selection-hint">请选择学生</div>';
+        }
+        
+        selectedArea.innerHTML = html;
+    }
+
+    updateStudentListItem(studentId, isSelected) {
+        const item = this.container.querySelector(`.student-list-item[data-student-id="${studentId}"]`);
+        if (item) {
+            const checkbox = item.querySelector('.student-checkbox');
+            if (checkbox) {
+                checkbox.checked = isSelected;
+            }
+            if (isSelected) {
+                item.classList.add('selected');
+            } else {
+                item.classList.remove('selected');
+            }
+        }
     }
 
     getSelectedStudents() {

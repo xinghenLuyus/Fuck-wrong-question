@@ -5,6 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>添加题目 - 错题管理系统</title>
     <link rel="stylesheet" href="/static/css/style.css">
+    <!-- 拼音库 -->
+    <script>
+        (function() {
+            const cdns = [
+                'https://cdn.jsdelivr.net/npm/pinyin-pro@3.19.6/dist/index.js',
+                'https://unpkg.com/pinyin-pro@3.19.6/dist/index.js'
+            ];
+            let loaded = false, currentIndex = 0;
+            function loadNextCDN() {
+                if (loaded || currentIndex >= cdns.length) return;
+                const script = document.createElement('script');
+                script.src = cdns[currentIndex];
+                script.onload = () => { loaded = true; console.log('✅ pinyin-pro 库加载成功'); };
+                script.onerror = () => { currentIndex++; loadNextCDN(); };
+                document.head.appendChild(script);
+            }
+            loadNextCDN();
+        })();
+    </script>
 </head>
 <body>
     <div class="container">
@@ -32,10 +51,19 @@
                 <h2 class="card-title">添加新题目</h2>
             </div>
             <form id="add-question-form">
-                <!-- 图片上传 -->
+                <!-- 图片上传和编辑 -->
                 <div class="form-group">
-                    <label class="form-label">题目截图</label>
+                    <label class="form-label">题目截图和文字</label>
                     <div id="image-uploader"></div>
+                    <div class="image-editor-note">
+                        <p><strong>💡 图片编辑功能：</strong></p>
+                        <ul>
+                            <li>📋 支持剪切板粘贴图片（Ctrl+V）</li>
+                            <li>✂️ 点击图片可进行裁剪编辑</li>
+                            <li>✏️ 可直接输入题目文字</li>
+                            <li>🔄 拖拽调整图片和文字顺序</li>
+                        </ul>
+                    </div>
                 </div>
 
                 <!-- 错题学生选择 -->

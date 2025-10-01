@@ -5,6 +5,38 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>学生管理 - 错题管理系统</title>
     <link rel="stylesheet" href="/static/css/style.css">
+    <!-- 拼音库 - 使用多个CDN备用 -->
+    <script>
+        // CDN 备用加载方案
+        (function() {
+            const cdns = [
+                'https://cdn.jsdelivr.net/npm/pinyin-pro@3.19.6/dist/index.js',
+                'https://unpkg.com/pinyin-pro@3.19.6/dist/index.js',
+                'https://cdn.bootcdn.net/ajax/libs/pinyin-pro/3.19.6/index.js'
+            ];
+            
+            let loaded = false;
+            let currentIndex = 0;
+            
+            function loadNextCDN() {
+                if (loaded || currentIndex >= cdns.length) return;
+                
+                const script = document.createElement('script');
+                script.src = cdns[currentIndex];
+                script.onload = function() {
+                    loaded = true;
+                };
+                script.onerror = function() {
+                    console.warn('❌ CDN 加载失败:', cdns[currentIndex]);
+                    currentIndex++;
+                    loadNextCDN();
+                };
+                document.head.appendChild(script);
+            }
+            
+            loadNextCDN();
+        })();
+    </script>
 </head>
 <body>
     <div class="container">
@@ -21,10 +53,10 @@
             <div class="form-group">
                 <label class="form-label">筛选和搜索</label>
                 <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                    <select id="class-filter" class="form-input" style="flex: 1; min-width: 150px;">
+                    <select id="class-filter" class="form-input" style="flex: 0 0 150px; min-width: 150px;">
                         <option value="">所有班级</option>
                     </select>
-                    <input type="text" id="search-input" class="form-input" placeholder="搜索学号或姓名..." style="flex: 2; min-width: 200px;">
+                    <input type="text" id="search-input" class="form-input" placeholder="搜索学号、姓名或拼音首字母..." style="flex: 1; min-width: 200px;">
                 </div>
             </div>
         </div>
@@ -80,6 +112,42 @@
         let classes = [];
         let currentFilter = { class_name: '', search: '' };
         let editingStudent = null;
+
+        // 拼音搜索工具（使用 pinyin-pro 库）
+        const PinyinHelper = {
+            // 匹配函数：支持中文、拼音全拼、拼音首字母
+            matches: function(chinese, searchTerm) {
+                if (!chinese || !searchTerm) return false;
+                searchTerm = searchTerm.toLowerCase().trim();
+                
+                // 原字符匹配（始终可用）
+                if (chinese.toLowerCase().includes(searchTerm)) return true;
+                
+                // 尝试使用 pinyin-pro 库
+                try {
+                    // 检查库是否加载
+                    if (!window.pinyinPro) {
+                        console.warn('pinyin-pro 库未加载');
+                        return false;
+                    }
+                    
+                    const { pinyin } = window.pinyinPro;
+                    
+                    // 全拼匹配（不带音调）
+                    const fullPinyin = pinyin(chinese, { toneType: 'none' }).replace(/\s+/g, '').toLowerCase();
+                    if (fullPinyin.includes(searchTerm)) return true;
+                    
+                    // 首字母匹配
+                    const firstLetters = pinyin(chinese, { pattern: 'first', toneType: 'none' }).replace(/\s+/g, '').toLowerCase();
+                    if (firstLetters.includes(searchTerm)) return true;
+                    
+                } catch (e) {
+                    console.error('拼音转换失败:', e);
+                }
+                
+                return false;
+            }
+        };
 
         // 页面加载完成后执行
         document.addEventListener('DOMContentLoaded', function() {
@@ -153,12 +221,16 @@
                 );
             }
 
-            // 搜索筛选
+            // 搜索筛选（支持拼音）
             if (currentFilter.search) {
                 const searchTerm = currentFilter.search.toLowerCase();
                 filteredStudents = filteredStudents.filter(student => 
-                    student.name.toLowerCase().includes(searchTerm) ||
-                    student.student_no.toLowerCase().includes(searchTerm)
+                    // 姓名匹配（支持拼音和首字母）
+                    PinyinHelper.matches(student.name, searchTerm) ||
+                    // 学号匹配
+                    student.student_no.toLowerCase().includes(searchTerm) ||
+                    // 班级匹配（支持拼音和首字母）
+                    PinyinHelper.matches(student.class_name, searchTerm)
                 );
             }
 

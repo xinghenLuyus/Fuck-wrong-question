@@ -5,6 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>导出预览 - 错题管理系统</title>
     <link rel="stylesheet" href="/static/css/style.css">
+    <!-- 拼音库 -->
+    <script>
+        (function() {
+            const cdns = [
+                'https://cdn.jsdelivr.net/npm/pinyin-pro@3.19.6/dist/index.js',
+                'https://unpkg.com/pinyin-pro@3.19.6/dist/index.js'
+            ];
+            let loaded = false, currentIndex = 0;
+            function loadNextCDN() {
+                if (loaded || currentIndex >= cdns.length) return;
+                const script = document.createElement('script');
+                script.src = cdns[currentIndex];
+                script.onload = () => { loaded = true; console.log('✅ pinyin-pro 库加载成功'); };
+                script.onerror = () => { currentIndex++; loadNextCDN(); };
+                document.head.appendChild(script);
+            }
+            loadNextCDN();
+        })();
+    </script>
 </head>
 <body>
     <div class="container">
@@ -124,7 +143,7 @@
             if (!exportSettings) {
                 return {
                     title_size: 16,
-                    question_number_size: 14,
+                    question_number_size: 12,
                     text_size: 12,
                     image_scale: 1.0,
                     image_width: 5.0,
@@ -192,7 +211,7 @@
             wrongQuestions.forEach(question => {
                 // 获取该题的有效设置
                 const questionSettings = getQuestionSettings(question.id);
-                const questionNumberSize = questionSettings.question_number_size || 14;
+                const questionNumberSize = questionSettings.question_number_size || 12;
                 const textSize = questionSettings.text_size || 12;
                 const imageScale = questionSettings.image_scale || 1.0;
                 const imageWidth = (questionSettings.image_width || 5.0) * imageScale;

@@ -1,6 +1,6 @@
 {
   "title_size": 16,
-  "question_number_size": 14,
+  "question_number_size": 12,
   "text_size": 12,
   "line_spacing": 1.5,
   "image_scale": 1,
@@ -8,16 +8,5 @@
   "question_spacing": 0,
   "show_student_info": true,
   "show_question_text": true,
-  "question_overrides": {
-    "1": {
-      "question_number-size": 5,
-      "text_size": 11,
-      "image_scale": 0.5,
-      "question_spacing": 5
-    },
-    "2": {
-      "question_number-size": 24,
-      "text_size": 20
-    }
-  }
+  "question_overrides": {}
 }

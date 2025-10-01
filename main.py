@@ -1,9 +1,9 @@
 from fastapi import FastAPI, Request, Depends
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
 from database.models import init_database
-from api import papers, questions, students, categories, export
+from api import papers, questions, students, categories, export, document_parser
 import os
 
 # 创建FastAPI应用
@@ -15,6 +15,7 @@ app.include_router(papers.router)
 app.include_router(questions.router)
 app.include_router(students.router)
 app.include_router(export.router)
+app.include_router(document_parser.router)
 
 # 挂载静态文件
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -48,10 +49,20 @@ async def add_paper_page(request: Request):
 async def add_question_page(request: Request, paper_id: int):
     return templates.TemplateResponse("add_question.html", {"request": request, "paper_id": paper_id})
 
+# 自动解析试卷页面
+@app.get("/auto_parse/{paper_id}", response_class=HTMLResponse)
+async def auto_parse_page(request: Request, paper_id: int):
+    return templates.TemplateResponse("auto_parse.html", {"request": request, "paper_id": paper_id})
+
 # 试卷预览页面
 @app.get("/preview/{paper_id}", response_class=HTMLResponse)
 async def preview_page(request: Request, paper_id: int):
     return templates.TemplateResponse("preview.html", {"request": request, "paper_id": paper_id})
+
+# 选择学生页面（用于导出单个学生错题）
+@app.get("/select_student/{paper_id}", response_class=HTMLResponse)
+async def select_student_page(request: Request, paper_id: int):
+    return templates.TemplateResponse("select_student.html", {"request": request, "paper_id": paper_id})
 
 # 导出预览页面
 @app.get("/export_preview/{paper_id}/{student_id}", response_class=HTMLResponse)
