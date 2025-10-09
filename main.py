@@ -59,9 +59,9 @@ async def auto_parse_page(request: Request, paper_id: int):
 async def preview_page(request: Request, paper_id: int):
     return templates.TemplateResponse("preview.html", {"request": request, "paper_id": paper_id})
 
-# 导出预览页面
+# 导出预览页面（支持单个或多个学生ID，用逗号分隔）
 @app.get("/export_preview/{paper_id}/{student_id}", response_class=HTMLResponse)
-async def export_preview_page(request: Request, paper_id: int, student_id: int):
+async def export_preview_page(request: Request, paper_id: int, student_id: str):
     return templates.TemplateResponse("export_preview.html", {
         "request": request, 
         "paper_id": paper_id, 

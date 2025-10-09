@@ -66,9 +66,9 @@
     <script src="/static/js/utils.js"></script>
     <script>
         let paperId = null;
-        let studentId = null;
+        let studentIds = []; // 改为数组支持多个学生
         let paper = null;
-        let student = null;
+        let students = []; // 改为数组
         let questions = [];
         let wrongQuestions = [];
         let exportSettings = null;
@@ -79,9 +79,12 @@
             // 从URL获取参数
             const pathParts = window.location.pathname.split('/');
             paperId = pathParts[pathParts.length - 2];
-            studentId = pathParts[pathParts.length - 1];
+            const studentIdParam = pathParts[pathParts.length - 1];
             
-            if (!paperId || !studentId || isNaN(paperId) || isNaN(studentId)) {
+            // 支持单个或多个学生ID（逗号分隔）
+            studentIds = studentIdParam.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+            
+            if (!paperId || isNaN(paperId) || studentIds.length === 0) {
                 Utils.showError('无效的参数');
                 goBack();
                 return;
@@ -94,19 +97,25 @@
         async function loadPreviewData() {
             try {
                 // 并行加载数据
-                const [paperData, studentData, questionsData, settingsData] = await Promise.all([
+                const loadPromises = [
                     Utils.get(`/api/papers/${paperId}`),
-                    Utils.get(`/api/students/${studentId}`),
                     Utils.get(`/api/questions/paper/${paperId}`),
                     Utils.get(`/api/export/settings/${paperId}`)
-                ]);
+                ];
+                
+                // 加载所有学生信息
+                studentIds.forEach(id => {
+                    loadPromises.push(Utils.get(`/api/students/${id}`));
+                });
+                
+                const results = await Promise.all(loadPromises);
+                
+                paper = results[0];
+                questions = results[1];
+                exportSettings = results[2];
+                students = results.slice(3); // 剩余的都是学生数据
 
-                paper = paperData;
-                student = studentData;
-                questions = questionsData;
-                exportSettings = settingsData;
-
-                // 筛选出该学生的错题
+                // 筛选出学生的错题
                 filterWrongQuestions();
                 
                 // 渲染预览
@@ -122,20 +131,47 @@
         function filterWrongQuestions() {
             wrongQuestions = [];
             
-            for (const question of questions) {
-                if (question.wrong_students) {
-                    const wrongStudentIds = question.wrong_students.split(',')
-                        .map(id => parseInt(id.trim()))
-                        .filter(id => !isNaN(id));
+            // 如果是多个学生，按学生组织错题
+            if (students.length > 1) {
+                students.forEach(student => {
+                    const studentWrongQuestions = [];
                     
-                    if (wrongStudentIds.includes(parseInt(studentId))) {
-                        wrongQuestions.push(question);
+                    for (const question of questions) {
+                        if (question.wrong_students) {
+                            const wrongStudentIds = question.wrong_students.split(',')
+                                .map(id => parseInt(id.trim()))
+                                .filter(id => !isNaN(id));
+                            
+                            if (wrongStudentIds.includes(student.id)) {
+                                studentWrongQuestions.push(question);
+                            }
+                        }
+                    }
+                    
+                    if (studentWrongQuestions.length > 0) {
+                        studentWrongQuestions.sort((a, b) => a.question_no - b.question_no);
+                        wrongQuestions.push({
+                            student: student,
+                            questions: studentWrongQuestions
+                        });
+                    }
+                });
+            } else {
+                // 单个学生的逻辑保持不变
+                const student = students[0];
+                for (const question of questions) {
+                    if (question.wrong_students) {
+                        const wrongStudentIds = question.wrong_students.split(',')
+                            .map(id => parseInt(id.trim()))
+                            .filter(id => !isNaN(id));
+                        
+                        if (wrongStudentIds.includes(student.id)) {
+                            wrongQuestions.push(question);
+                        }
                     }
                 }
+                wrongQuestions.sort((a, b) => a.question_no - b.question_no);
             }
-            
-            // 按题号排序
-            wrongQuestions.sort((a, b) => a.question_no - b.question_no);
         }
 
         // 获取题目的有效设置（支持单题覆盖）
@@ -171,122 +207,169 @@
         // 渲染预览
         function renderPreview() {
             // 更新标题
-            document.getElementById('preview-title').textContent = 
-                `${paper.name} - ${student.name}(${student.student_no}) 错题集`;
+            let titleText = '';
+            if (students.length === 1) {
+                titleText = `${paper.name} - ${students[0].name}(${students[0].student_no}) 错题集`;
+            } else {
+                titleText = `${paper.name} - ${students.length}位学生 错题集`;
+            }
+            document.getElementById('preview-title').textContent = titleText;
 
             const container = document.getElementById('word-preview');
             
-            if (wrongQuestions.length === 0) {
+            // 检查是否有错题
+            const hasWrongQuestions = students.length > 1 
+                ? wrongQuestions.length > 0 
+                : wrongQuestions.length > 0;
+            
+            if (!hasWrongQuestions) {
                 container.innerHTML = `
                     <div style="text-align: center; padding: 40px; color: #7f8c8d;">
-                        <p>🎉 该学生没有错题</p>
+                        <p>🎉 所选学生没有错题</p>
                         <p style="font-size: 14px; margin-top: 10px;">恭喜，所有题目都正确！</p>
                     </div>
                 `;
                 return;
             }
 
-            // 生成真实Word样式的预览
             const globalSettings = exportSettings || {};
             const titleSize = globalSettings.title_size || 16;
             const showStudentInfo = globalSettings.show_student_info !== false;
             
+            let html = '';
+            
+            // 多个学生：显示每个学生的错题汇总
+            if (students.length > 1) {
+                html += `
+                    <div class="multi-student-preview" style="padding: 20px;">
+                        <h2 style="text-align: center; margin-bottom: 30px; color: #2c3e50;">
+                            ${paper.name} - 错题集（${students.length}位学生）
+                        </h2>
+                `;
+                
+                wrongQuestions.forEach((item, index) => {
+                    html += `
+                        <div class="student-section" style="margin-bottom: 40px; padding: 20px; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                            <h3 style="color: #3498db; border-bottom: 2px solid #3498db; padding-bottom: 10px; margin-bottom: 20px;">
+                                ${index + 1}. ${item.student.name}（${item.student.student_no}） - ${item.questions.length}道错题
+                            </h3>
+                            <div class="questions-preview">
+                    `;
+                    
+                    item.questions.forEach(question => {
+                        const questionSettings = getQuestionSettings(question.id);
+                        html += renderQuestionPreview(question, questionSettings);
+                    });
+                    
+                    html += `
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                html += '</div>';
+            } else {
+                // 单个学生：使用原来的Word样式预览
+                html = `<div class="word-document">`;
+                
+                if (showStudentInfo) {
+                    html += `
+                        <div class="word-header">
+                            <h1 style="font-size: ${titleSize}pt; text-align: center; margin-bottom: 20pt;">
+                                ${paper.name} - ${students[0].name}(${students[0].student_no}) 错题集
+                            </h1>
+                        </div>
+                    `;
+                }
+                
+                html += '<div class="word-content">';
+                
+                wrongQuestions.forEach(question => {
+                    const questionSettings = getQuestionSettings(question.id);
+                    html += renderQuestionPreview(question, questionSettings);
+                });
+                
+                html += '</div></div>';
+            }
+
+            container.innerHTML = html;
+        }
+        
+        // 渲染单个题目预览
+        function renderQuestionPreview(question, questionSettings) {
+            const questionNumberSize = questionSettings.question_number_size || 12;
+            const textSize = questionSettings.text_size || 12;
+            const imageScale = questionSettings.image_scale || 1.0;
+            const imageWidth = (questionSettings.image_width || 5.0) * imageScale;
+            const questionSpacing = questionSettings.question_spacing || 0;
+            const showQuestionText = questionSettings.show_question_text !== false;
+            
             let html = `
-                <div class="word-document">
+                <div class="word-question" style="margin-bottom: 15pt;">
+                    <h3 style="font-size: ${questionNumberSize}pt; font-weight: bold; margin-bottom: 10pt; color: #000;">
+                        第${question.question_no}题
+                    </h3>
             `;
             
-            // 添加标题（如果设置显示）
-            if (showStudentInfo) {
+            // 添加题目文字
+            if (showQuestionText && question.question_text && question.question_text.trim()) {
                 html += `
-                    <div class="word-header">
-                        <h1 style="font-size: ${titleSize}pt; text-align: center; margin-bottom: 20pt;">
-                            ${paper.name} - ${student.name}(${student.student_no}) 错题集
-                        </h1>
+                    <div class="word-question-text" style="font-size: ${textSize}pt; margin-bottom: 10pt; line-height: 1.5; color: #333;">
+                        ${question.question_text.replace(/\n/g, '<br>')}
                     </div>
                 `;
             }
             
-            html += '<div class="word-content">';
-
-            wrongQuestions.forEach(question => {
-                // 获取该题的有效设置
-                const questionSettings = getQuestionSettings(question.id);
-                const questionNumberSize = questionSettings.question_number_size || 12;
-                const textSize = questionSettings.text_size || 12;
-                const imageScale = questionSettings.image_scale || 1.0;
-                const imageWidth = (questionSettings.image_width || 5.0) * imageScale;
-                const questionSpacing = questionSettings.question_spacing || 0;
-                const showQuestionText = questionSettings.show_question_text !== false;
-                
+            // 添加图片
+            if (question.image_urls) {
+                const imageUrls = question.image_urls.split(',').filter(url => url.trim());
+                if (imageUrls.length > 0) {
+                    html += '<div class="word-images" style="margin-bottom: 10pt;">';
+                    imageUrls.forEach(url => {
+                        const cleanUrl = url.trim();
+                        if (cleanUrl) {
+                            const widthPx = imageWidth * 72;
+                            html += `
+                                <img src="${cleanUrl}" alt="题目图片" 
+                                     style="max-width: ${widthPx}px; width: auto; height: auto; 
+                                            margin-bottom: 8pt; display: block; 
+                                            border: 1px solid #ddd; border-radius: 2px;">
+                            `;
+                        }
+                    });
+                    html += '</div>';
+                }
+            }
+            
+            // 添加留白
+            if (questionSpacing > 0) {
+                const spacingHeight = questionSpacing * 15;
                 html += `
-                    <div class="word-question" style="margin-bottom: 15pt;">
-                        <h3 style="font-size: ${questionNumberSize}pt; font-weight: bold; margin-bottom: 10pt; color: #000;">
-                            第${question.question_no}题
-                        </h3>
-                `;
-                
-                // 添加题目文字（如果设置显示且存在）
-                if (showQuestionText && question.question_text && question.question_text.trim()) {
-                    html += `
-                        <div class="word-question-text" style="font-size: ${textSize}pt; margin-bottom: 10pt; line-height: 1.5; color: #333;">
-                            ${question.question_text.replace(/\n/g, '<br>')}
-                        </div>
-                    `;
-                }
-                
-                // 添加图片
-                if (question.image_urls) {
-                    const imageUrls = question.image_urls.split(',').filter(url => url.trim());
-                    if (imageUrls.length > 0) {
-                        html += '<div class="word-images" style="margin-bottom: 10pt;">';
-                        imageUrls.forEach(url => {
-                            const cleanUrl = url.trim();
-                            if (cleanUrl) {
-                                const widthPx = imageWidth * 72; // 1英寸 = 72像素
-                                html += `
-                                    <img src="${cleanUrl}" alt="题目图片" 
-                                         style="max-width: ${widthPx}px; width: auto; height: auto; 
-                                                margin-bottom: 8pt; display: block; 
-                                                border: 1px solid #ddd; border-radius: 2px;">
-                                `;
-                            }
-                        });
-                        html += '</div>';
-                    }
-                }
-                
-                // 添加留白（如果设置了间距）
-                if (questionSpacing > 0) {
-                    const spacingHeight = questionSpacing * 15; // 每行约15pt
-                    html += `
-                        <div class="word-spacing" style="height: ${spacingHeight}px; 
-                                                           border-left: 2px dashed #ccc; 
-                                                           margin-left: 15px; 
-                                                           margin-bottom: 10pt; 
-                                                           position: relative;">
-                            <span style="position: absolute; left: 10px; top: 50%; 
-                                         transform: translateY(-50%); color: #999; 
-                                         font-size: 10pt; background: white; padding: 0 5px;">
-                                留白${questionSpacing}行
-                            </span>
-                        </div>
-                    `;
-                }
-                
-                html += '</div>';
-            });
-
-            html += `
+                    <div class="word-spacing" style="height: ${spacingHeight}px; 
+                                                       border-left: 2px dashed #ccc; 
+                                                       margin-left: 15px; 
+                                                       margin-bottom: 10pt; 
+                                                       position: relative;">
+                        <span style="position: absolute; left: 10px; top: 50%; 
+                                     transform: translateY(-50%); color: #999; 
+                                     font-size: 10pt; background: white; padding: 0 5px;">
+                            留白${questionSpacing}行
+                        </span>
                     </div>
-                </div>
-            `;
-
-            container.innerHTML = html;
+                `;
+            }
+            
+            html += '</div>';
+            return html;
         }
 
         // 下载Word文档
         async function downloadWord() {
-            if (wrongQuestions.length === 0) {
+            const hasWrongQuestions = students.length > 1 
+                ? wrongQuestions.length > 0 
+                : wrongQuestions.length > 0;
+                
+            if (!hasWrongQuestions) {
                 Utils.showError('没有错题可以导出');
                 return;
             }
@@ -295,31 +378,53 @@
             showGenerationProgress();
 
             try {
-                // 模拟进度更新
-                updateProgress(20, '正在分析错题...');
-                
-                await new Promise(resolve => setTimeout(resolve, 500));
-                updateProgress(50, '正在生成Word文档...');
-                
-                // 调用导出API
-                const response = await Utils.post(`/api/export/student/${paperId}`, {
-                    student_id: parseInt(studentId)
-                });
-                
-                updateProgress(80, '正在准备下载...');
-                await new Promise(resolve => setTimeout(resolve, 300));
-                
-                updateProgress(100, '完成！');
-                
-                // 隐藏进度条
-                hideGenerationProgress();
-                
-                Utils.showSuccess(`${student.name} 的错题文档生成完成`);
-                
-                // 开始下载
-                setTimeout(() => {
-                    Utils.downloadFile(response.download_url, `${student.name}-${student.student_no}.docx`);
-                }, 500);
+                // 多个学生：导出ZIP压缩包
+                if (students.length > 1) {
+                    updateProgress(20, '正在分析错题...');
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    
+                    updateProgress(50, '正在生成Word文档...');
+                    
+                    // 调用批量导出API
+                    const response = await Utils.post(`/api/export/students/${paperId}`, {
+                        student_ids: studentIds
+                    });
+                    
+                    updateProgress(80, '正在打包ZIP文件...');
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                    
+                    updateProgress(100, '完成！');
+                    hideGenerationProgress();
+                    
+                    Utils.showSuccess(`${students.length}位学生的错题文档已打包完成`);
+                    
+                    // 下载ZIP文件
+                    setTimeout(() => {
+                        Utils.downloadFile(response.download_url, `${paper.name}_错题集.zip`);
+                    }, 500);
+                } else {
+                    // 单个学生：导出单个Word文档
+                    updateProgress(20, '正在分析错题...');
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    
+                    updateProgress(50, '正在生成Word文档...');
+                    
+                    const response = await Utils.post(`/api/export/student/${paperId}`, {
+                        student_id: studentIds[0]
+                    });
+                    
+                    updateProgress(80, '正在准备下载...');
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                    
+                    updateProgress(100, '完成！');
+                    hideGenerationProgress();
+                    
+                    Utils.showSuccess(`${students[0].name} 的错题文档生成完成`);
+                    
+                    setTimeout(() => {
+                        Utils.downloadFile(response.download_url, `${students[0].class_name}-${students[0].student_no}-${students[0].name}.docx`);
+                    }, 500);
+                }
                 
             } catch (error) {
                 hideGenerationProgress();
@@ -487,6 +592,32 @@
             text-align: center;
             color: #7f8c8d;
             margin: 0;
+        }
+
+        /* 多学生预览样式 */
+        .multi-student-preview {
+            background: #f5f5f5;
+        }
+
+        .multi-student-preview > h2 {
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .student-section {
+            margin-bottom: 30px !important;
+        }
+
+        .student-section h3 {
+            font-size: 18px;
+            margin-bottom: 15px;
+        }
+
+        .questions-preview {
+            padding: 15px;
         }
 
         /* 响应式设计 */

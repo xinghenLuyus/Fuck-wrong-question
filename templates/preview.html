@@ -159,7 +159,7 @@
     <div id="student-select-modal" class="modal hidden">
         <div class="modal-content modal-fullscreen">
             <div class="modal-header">
-                <h3>👤 选择学生</h3>
+                <h3>👤 选择学生（可多选）</h3>
                 <button onclick="closeStudentSelectModal()" class="btn btn-secondary">×</button>
             </div>
             <div class="modal-body">
@@ -513,10 +513,13 @@
             if (!exportStudentSelector) {
                 const container = document.getElementById('export-student-selector');
                 exportStudentSelector = new StudentSelector(container, {
-                    multiple: false,
+                    multiple: true,  // 改为支持多选
                     searchable: true
                 });
             }
+            
+            // 清空之前的选择
+            exportStudentSelector.setSelectedStudents([]);
             
             // 显示学生选择模态框
             document.getElementById('student-select-modal').classList.remove('hidden');
@@ -531,13 +534,14 @@
         async function exportSelectedStudent() {
             const selectedStudents = exportStudentSelector.getSelectedStudents();
             if (selectedStudents.length === 0) {
-                Utils.showError('请选择一个学生');
+                Utils.showError('请至少选择一个学生');
                 return;
             }
 
-            const studentId = selectedStudents[0];
+            // 支持多个学生ID，用逗号分隔
+            const studentIds = selectedStudents.join(',');
             // 跳转到导出预览页面
-            Utils.redirect(`/export_preview/${paperId}/${studentId}`);
+            Utils.redirect(`/export_preview/${paperId}/${studentIds}`);
         }
 
         // 导出所有学生错题

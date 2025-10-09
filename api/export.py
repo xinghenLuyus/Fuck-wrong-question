@@ -98,6 +98,9 @@ async def upload_image(
 class ExportRequest(BaseModel):
     student_id: int
 
+class ExportMultipleRequest(BaseModel):
+    student_ids: List[int]
+
 class ExportSettings(BaseModel):
     # 文档样式
     title_size: int = 16
@@ -201,8 +204,8 @@ async def export_student_word(paper_id: int, request: ExportRequest, db: Session
         for _ in range(spacing_lines):
             doc.add_paragraph()
     
-    # 保存到临时文件
-    temp_filename = f"{student.name}-{student.student_no}.docx"
+    # 保存到临时文件（格式：班级-学号-姓名.docx）
+    temp_filename = f"{student.class_name}-{student.student_no}-{student.name}.docx"
     temp_path = f"static/uploads/{temp_filename}"
     doc.save(temp_path)
     
@@ -223,7 +226,7 @@ async def download_file(filename: str):
 
 @router.post("/export/all/{paper_id}")
 async def export_all_students(paper_id: int, db: Session = Depends(get_db)):
-    """导出所有学生的错题Word文档，打包成ZIP"""
+    """导出所有学生的错题Word文档，按班级分类打包成ZIP"""
     # 清理过期文件
     cleanup_old_exports()
     
@@ -238,8 +241,8 @@ async def export_all_students(paper_id: int, db: Session = Depends(get_db)):
     # 获取所有题目
     questions = db.query(Question).filter(Question.paper_id == paper_id).order_by(Question.question_no).all()
     
-    # 获取所有学生
-    students = db.query(Student).order_by(Student.student_no).all()
+    # 获取所有学生，按班级排序
+    students = db.query(Student).order_by(Student.class_name, Student.student_no).all()
     
     # 创建ZIP文件
     zip_buffer = io.BytesIO()
@@ -296,13 +299,107 @@ async def export_all_students(paper_id: int, db: Session = Depends(get_db)):
                 doc.save(doc_buffer)
                 doc_buffer.seek(0)
                 
-                # 添加到ZIP
-                zip_file.writestr(f"{student.name}-{student.student_no}.docx", doc_buffer.getvalue())
+                # 按班级添加到ZIP（使用班级名作为子文件夹，文件名格式：班级-学号-姓名.docx）
+                file_path_in_zip = f"{student.class_name}/{student.class_name}-{student.student_no}-{student.name}.docx"
+                zip_file.writestr(file_path_in_zip, doc_buffer.getvalue())
     
     zip_buffer.seek(0)
     
     # 保存ZIP文件
     zip_filename = f"{paper.name}_错题集.zip"
+    zip_path = f"static/uploads/{zip_filename}"
+    
+    with open(zip_path, 'wb') as f:
+        f.write(zip_buffer.getvalue())
+    
+    return {"download_url": f"/api/download/{zip_filename}"}
+
+@router.post("/export/students/{paper_id}")
+async def export_multiple_students(paper_id: int, request: ExportMultipleRequest, db: Session = Depends(get_db)):
+    """导出多个指定学生的错题Word文档，按班级分类打包成ZIP"""
+    # 清理过期文件
+    cleanup_old_exports()
+    
+    # 获取试卷信息
+    paper = db.query(Paper).filter(Paper.id == paper_id).first()
+    if not paper:
+        raise HTTPException(status_code=404, detail="试卷不存在")
+    
+    # 获取导出设置
+    settings = await get_export_settings(paper_id)
+    
+    # 获取所有题目
+    questions = db.query(Question).filter(Question.paper_id == paper_id).order_by(Question.question_no).all()
+    
+    # 获取指定的学生，按班级排序
+    students = db.query(Student).filter(Student.id.in_(request.student_ids)).order_by(Student.class_name, Student.student_no).all()
+    
+    if not students:
+        raise HTTPException(status_code=404, detail="未找到指定的学生")
+    
+    # 创建ZIP文件
+    zip_buffer = io.BytesIO()
+    
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        for student in students:
+            # 找到该学生的错题
+            wrong_questions = []
+            for question in questions:
+                if question.wrong_students:
+                    wrong_student_ids = [int(id.strip()) for id in question.wrong_students.split(',') if id.strip()]
+                    if student.id in wrong_student_ids:
+                        wrong_questions.append(question)
+            
+            if wrong_questions:  # 只为有错题的学生生成文档
+                # 创建Word文档
+                doc = Document()
+                
+                # 应用设置：添加标题
+                if settings.get("show_student_info", True):
+                    title = doc.add_heading(f'{paper.name} - {student.name}({student.student_no}) 错题集', 0)
+                    title.runs[0].font.size = Pt(settings.get("title_size", 18))
+                
+                for question in wrong_questions:
+                    qset = get_question_settings(settings, question.id)
+                    question_heading = doc.add_heading(f'第{question.question_no}题', level=1)
+                    question_heading.runs[0].font.size = Pt(qset.get("question_number_size", 16))
+                    if qset.get("show_question_text", True) and question.question_text and question.question_text.strip():
+                        text_para = doc.add_paragraph(question.question_text)
+                        text_para.runs[0].font.size = Pt(qset.get("text_size", 14))
+                    if question.image_urls:
+                        image_urls = question.image_urls.split(',')
+                        for url in image_urls:
+                            url = url.strip()
+                            if url:
+                                if url.startswith('/static/uploads/'):
+                                    image_path = f"static/uploads/{url.split('/')[-1]}"
+                                else:
+                                    image_path = url
+                                if os.path.exists(image_path):
+                                    try:
+                                        image_width = qset.get("image_width", 5.0) * qset.get("image_scale", 1.0)
+                                        doc.add_picture(image_path, width=Inches(image_width))
+                                    except Exception as e:
+                                        doc.add_paragraph(f"图片加载失败: {url}")
+                                else:
+                                    doc.add_paragraph(f"图片不存在: {url}")
+                    spacing_lines = qset.get("question_spacing", 30)
+                    for _ in range(spacing_lines):
+                        doc.add_paragraph()
+                
+                # 保存到内存
+                doc_buffer = io.BytesIO()
+                doc.save(doc_buffer)
+                doc_buffer.seek(0)
+                
+                # 按班级添加到ZIP（使用班级名作为子文件夹，文件名格式：班级-学号-姓名.docx）
+                file_path_in_zip = f"{student.class_name}/{student.class_name}-{student.student_no}-{student.name}.docx"
+                zip_file.writestr(file_path_in_zip, doc_buffer.getvalue())
+    
+    zip_buffer.seek(0)
+    
+    # 保存ZIP文件
+    zip_filename = f"{paper.name}_错题集_{len(students)}位学生.zip"
     zip_path = f"static/uploads/{zip_filename}"
     
     with open(zip_path, 'wb') as f:

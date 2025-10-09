@@ -44,6 +44,7 @@
             <h1>👥 学生管理</h1>
             <div>
                 <a href="/" class="btn btn-secondary">← 返回首页</a>
+                <button onclick="showImportModal()" class="btn btn-info">📊 从Excel导入</button>
                 <button onclick="addStudent()" class="btn btn-primary">➕ 添加学生</button>
             </div>
         </div>
@@ -106,7 +107,89 @@
         </div>
     </div>
 
+    <!-- Excel导入模态框 -->
+    <div id="import-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>📊 从Excel批量导入学生</h3>
+                <button onclick="closeImportModal()" class="btn btn-secondary">×</button>
+            </div>
+            <div class="modal-body">
+                <!-- 导入说明 -->
+                <div class="import-guide">
+                    <h4 style="color: #2c3e50; margin-bottom: 10px;">📋 Excel格式说明</h4>
+                    <div class="guide-box">
+                        <p style="margin: 5px 0;"><strong>固定列顺序：</strong></p>
+                        <ul style="margin: 10px 0; padding-left: 20px;">
+                            <li>第1列：<strong>班级</strong>（如：一班、二班）</li>
+                            <li>第2列：<strong>学号</strong>（如：001、002）</li>
+                            <li>第3列：<strong>姓名</strong>（如：张三、李四）</li>
+                        </ul>
+                        <p style="margin: 5px 0; color: #e67e22;"><strong>⚠️ 注意事项：</strong></p>
+                        <ul style="margin: 10px 0; padding-left: 20px; color: #7f8c8d;">
+                            <li>同班级同学号的学生会自动去重（保留第一个）</li>
+                            <li>学号必须为数字或字母数字组合</li>
+                            <li>班级、学号、姓名不能为空</li>
+                            <li>支持 .xlsx 和 .xls 格式</li>
+                        </ul>
+                    </div>
+                    
+                    <!-- 示例表格 -->
+                    <h4 style="color: #2c3e50; margin: 20px 0 10px 0;">📝 示例格式</h4>
+                    <div class="example-table">
+                        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+                            <thead>
+                                <tr style="background: #3498db; color: white;">
+                                    <th style="padding: 10px; border: 1px solid #ddd;">班级</th>
+                                    <th style="padding: 10px; border: 1px solid #ddd;">学号</th>
+                                    <th style="padding: 10px; border: 1px solid #ddd;">姓名</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td style="padding: 10px; border: 1px solid #ddd;">一班</td>
+                                    <td style="padding: 10px; border: 1px solid #ddd;">001</td>
+                                    <td style="padding: 10px; border: 1px solid #ddd;">张三</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 10px; border: 1px solid #ddd;">一班</td>
+                                    <td style="padding: 10px; border: 1px solid #ddd;">002</td>
+                                    <td style="padding: 10px; border: 1px solid #ddd;">李四</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 10px; border: 1px solid #ddd;">二班</td>
+                                    <td style="padding: 10px; border: 1px solid #ddd;">001</td>
+                                    <td style="padding: 10px; border: 1px solid #ddd;">王五</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 文件上传 -->
+                <div class="form-group">
+                    <label class="form-label">选择Excel文件</label>
+                    <input type="file" id="excel-file" accept=".xlsx,.xls" class="form-input" style="padding: 10px;">
+                </div>
+
+                <!-- 导入结果 -->
+                <div id="import-result" class="hidden" style="margin-top: 20px;">
+                    <h4 style="color: #2c3e50; margin-bottom: 10px;">导入结果</h4>
+                    <div id="import-summary" style="padding: 15px; background: #ecf0f1; border-radius: 4px; margin-bottom: 10px;"></div>
+                    <div id="import-details" style="max-height: 200px; overflow-y: auto; padding: 10px; background: white; border: 1px solid #ddd; border-radius: 4px;"></div>
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" onclick="closeImportModal()" class="btn btn-secondary">取消</button>
+                    <button type="button" onclick="importFromExcel()" class="btn btn-primary" id="import-btn">📥 开始导入</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="/static/js/utils.js"></script>
+    <!-- 引入 SheetJS 用于解析 Excel -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script>
         let students = [];
         let classes = [];
@@ -326,6 +409,264 @@
             editingStudent = null;
         }
 
+        // 显示导入模态框
+        function showImportModal() {
+            document.getElementById('import-modal').classList.remove('hidden');
+            document.getElementById('excel-file').value = '';
+            document.getElementById('import-result').classList.add('hidden');
+        }
+
+        // 关闭导入模态框
+        function closeImportModal() {
+            document.getElementById('import-modal').classList.add('hidden');
+            document.getElementById('excel-file').value = '';
+            document.getElementById('import-result').classList.add('hidden');
+        }
+
+        // 从Excel导入
+        async function importFromExcel() {
+            const fileInput = document.getElementById('excel-file');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                Utils.showError('请选择Excel文件');
+                return;
+            }
+
+            // 检查文件格式
+            if (!file.name.match(/\.(xlsx|xls)$/i)) {
+                Utils.showError('请选择Excel文件（.xlsx 或 .xls）');
+                return;
+            }
+
+            const importBtn = document.getElementById('import-btn');
+            const hideLoading = Utils.showLoading(importBtn);
+
+            try {
+                // 读取Excel文件
+                const data = await readExcelFile(file);
+                
+                if (!data || data.length === 0) {
+                    Utils.showError('Excel文件为空');
+                    hideLoading();
+                    return;
+                }
+
+                // 解析并验证数据
+                const result = parseStudentData(data);
+                
+                if (result.validStudents.length === 0) {
+                    Utils.showError('没有有效的学生数据');
+                    hideLoading();
+                    displayImportResult(result);
+                    return;
+                }
+
+                // 批量导入学生
+                const importResult = await batchImportStudents(result.validStudents);
+                
+                hideLoading();
+                
+                // 显示导入结果
+                displayImportResult({
+                    total: result.total,
+                    validStudents: result.validStudents,
+                    parseErrors: result.errors,
+                    imported: importResult.success,
+                    failed: importResult.failed,
+                    duplicates: importResult.duplicates,
+                    importErrors: importResult.errors
+                });
+
+                // 刷新学生列表
+                if (importResult.success > 0) {
+                    Utils.showSuccess(`成功导入 ${importResult.success} 名学生`);
+                    await loadStudents();
+                    await loadClasses();
+                }
+
+            } catch (error) {
+                hideLoading();
+                Utils.showError('导入失败: ' + error.message);
+            }
+        }
+
+        // 读取Excel文件
+        function readExcelFile(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                
+                reader.onload = function(e) {
+                    try {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, { type: 'array' });
+                        
+                        // 读取第一个工作表
+                        const firstSheetName = workbook.SheetNames[0];
+                        const worksheet = workbook.Sheets[firstSheetName];
+                        
+                        // 转换为JSON
+                        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                        
+                        resolve(jsonData);
+                    } catch (error) {
+                        reject(new Error('Excel文件解析失败'));
+                    }
+                };
+                
+                reader.onerror = function() {
+                    reject(new Error('文件读取失败'));
+                };
+                
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
+        // 解析学生数据
+        function parseStudentData(data) {
+            const validStudents = [];
+            const errors = [];
+            const seen = new Set(); // 用于去重（班级-学号）
+
+            // 从第1行开始（跳过表头如果有的话）
+            for (let i = 0; i < data.length; i++) {
+                const row = data[i];
+                const rowNum = i + 1;
+
+                // 跳过空行
+                if (!row || row.length === 0 || !row[0]) {
+                    continue;
+                }
+
+                const className = String(row[0] || '').trim();
+                const studentNo = String(row[1] || '').trim();
+                const name = String(row[2] || '').trim();
+
+                // 验证数据
+                if (!className) {
+                    errors.push(`第${rowNum}行：班级不能为空`);
+                    continue;
+                }
+
+                if (!studentNo) {
+                    errors.push(`第${rowNum}行：学号不能为空`);
+                    continue;
+                }
+
+                // 验证学号是否为有效字符（数字、字母、连字符）
+                if (!/^[a-zA-Z0-9\-]+$/.test(studentNo)) {
+                    errors.push(`第${rowNum}行：学号格式无效（${studentNo}）`);
+                    continue;
+                }
+
+                if (!name) {
+                    errors.push(`第${rowNum}行：姓名不能为空`);
+                    continue;
+                }
+
+                // 去重检查（同班级同学号）
+                const key = `${className}-${studentNo}`;
+                if (seen.has(key)) {
+                    errors.push(`第${rowNum}行：重复的学生（${className} - ${studentNo}）`);
+                    continue;
+                }
+
+                seen.add(key);
+                validStudents.push({
+                    class_name: className,
+                    student_no: studentNo,
+                    name: name,
+                    rowNum: rowNum
+                });
+            }
+
+            return {
+                total: data.length,
+                validStudents: validStudents,
+                errors: errors
+            };
+        }
+
+        // 批量导入学生
+        async function batchImportStudents(students) {
+            let success = 0;
+            let failed = 0;
+            let duplicates = 0;
+            const errors = [];
+
+            for (const student of students) {
+                try {
+                    await Utils.post('/api/students/', {
+                        class_name: student.class_name,
+                        student_no: student.student_no,
+                        name: student.name
+                    });
+                    success++;
+                } catch (error) {
+                    if (error.message && error.message.includes('已存在')) {
+                        duplicates++;
+                        errors.push(`第${student.rowNum}行：${student.name}(${student.student_no}) 已存在`);
+                    } else {
+                        failed++;
+                        errors.push(`第${student.rowNum}行：${student.name} 导入失败 - ${error.message}`);
+                    }
+                }
+            }
+
+            return { success, failed, duplicates, errors };
+        }
+
+        // 显示导入结果
+        function displayImportResult(result) {
+            const resultDiv = document.getElementById('import-result');
+            const summaryDiv = document.getElementById('import-summary');
+            const detailsDiv = document.getElementById('import-details');
+
+            // 汇总信息
+            let summaryHtml = '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px;">';
+            
+            if (result.total !== undefined) {
+                summaryHtml += `<div><strong>读取行数：</strong>${result.total}</div>`;
+            }
+            if (result.validStudents) {
+                summaryHtml += `<div><strong>有效数据：</strong>${result.validStudents.length}</div>`;
+            }
+            if (result.imported !== undefined) {
+                summaryHtml += `<div style="color: #27ae60;"><strong>✅ 导入成功：</strong>${result.imported}</div>`;
+            }
+            if (result.duplicates !== undefined && result.duplicates > 0) {
+                summaryHtml += `<div style="color: #f39c12;"><strong>⚠️ 已存在：</strong>${result.duplicates}</div>`;
+            }
+            if (result.failed !== undefined && result.failed > 0) {
+                summaryHtml += `<div style="color: #e74c3c;"><strong>❌ 失败：</strong>${result.failed}</div>`;
+            }
+            
+            summaryHtml += '</div>';
+            summaryDiv.innerHTML = summaryHtml;
+
+            // 详细错误信息
+            let detailsHtml = '';
+            
+            // 收集所有错误
+            const parseErrors = result.parseErrors || [];
+            const importErrors = result.importErrors || [];
+            const allErrors = [...parseErrors, ...importErrors];
+            
+            if (allErrors.length > 0) {
+                detailsHtml = '<div style="color: #7f8c8d;"><strong>详细信息：</strong></div>';
+                detailsHtml += '<ul style="margin: 5px 0; padding-left: 20px; font-size: 13px; color: #7f8c8d;">';
+                allErrors.forEach(err => {
+                    detailsHtml += `<li style="margin: 3px 0;">${err}</li>`;
+                });
+                detailsHtml += '</ul>';
+            } else {
+                detailsHtml = '<div style="color: #27ae60; font-size: 14px;">✅ 所有数据导入成功，没有错误</div>';
+            }
+            
+            detailsDiv.innerHTML = detailsHtml;
+            resultDiv.classList.remove('hidden');
+        }
+
         // 表单提交
         document.getElementById('student-form').addEventListener('submit', async function(e) {
             e.preventDefault();
@@ -384,6 +725,40 @@
             width: 90%;
             max-height: 90vh;
             overflow-y: auto;
+        }
+
+        /* 导入模态框样式 */
+        #import-modal .modal-content {
+            max-width: 800px;
+        }
+
+        .import-guide {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .guide-box {
+            background: white;
+            padding: 15px;
+            border-radius: 4px;
+            border-left: 4px solid #3498db;
+            margin: 10px 0;
+        }
+
+        .example-table table {
+            background: white;
+            font-size: 14px;
+        }
+
+        .example-table th {
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .example-table td {
+            text-align: center;
         }
 
         .modal-header {
