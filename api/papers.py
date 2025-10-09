@@ -97,9 +97,43 @@ async def update_paper(paper_id: int, paper_update: PaperUpdate, db: Session = D
 @router.delete("/{paper_id}")
 async def delete_paper(paper_id: int, db: Session = Depends(get_db)):
     """删除试卷"""
+    import os
+    import shutil
+    from config import UPLOAD_DIR
+    
     paper = db.query(Paper).filter(Paper.id == paper_id).first()
     if not paper:
         raise HTTPException(status_code=404, detail="试卷不存在")
+    
+    # 获取试卷关联的所有题目
+    questions = db.query(Question).filter(Question.paper_id == paper_id).all()
+    
+    # 删除旧版本的图片文件（兼容旧版本）
+    deleted_images = []
+    for question in questions:
+        if question.image_urls:
+            urls = question.image_urls.split(',')
+            for url in urls:
+                url = url.strip()
+                if url.startswith('/static/uploads/'):
+                    # 提取文件名
+                    filename = url.split('/')[-1]
+                    old_file_path = os.path.join(UPLOAD_DIR, filename)
+                    if os.path.exists(old_file_path):
+                        try:
+                            os.remove(old_file_path)
+                            deleted_images.append(filename)
+                        except Exception as e:
+                            print(f"删除旧版文件失败 {old_file_path}: {e}")
+    
+    # 删除新版本的试卷文件夹（如果存在）
+    paper_folder = os.path.join(UPLOAD_DIR, f"paper_{paper_id}")
+    if os.path.exists(paper_folder):
+        try:
+            shutil.rmtree(paper_folder)
+            print(f"已删除试卷文件夹: {paper_folder}")
+        except Exception as e:
+            print(f"删除文件夹失败 {paper_folder}: {e}")
     
     # 删除相关题目
     db.query(Question).filter(Question.paper_id == paper_id).delete()
@@ -108,4 +142,8 @@ async def delete_paper(paper_id: int, db: Session = Depends(get_db)):
     db.delete(paper)
     db.commit()
     
-    return {"message": "试卷删除成功"}
+    return {
+        "message": "试卷删除成功",
+        "deleted_images": deleted_images,
+        "deleted_folder": paper_folder if os.path.exists(paper_folder) else None
+    }

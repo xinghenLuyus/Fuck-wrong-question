@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, File, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 from database.models import get_db, Question, Paper, Student
@@ -59,25 +59,41 @@ def cleanup_old_exports():
 
 # 图片上传
 @router.post("/upload")
-async def upload_image(file: UploadFile = File(...)):
-    """上传图片"""
+async def upload_image(
+    file: UploadFile = File(...),
+    paper_id: Optional[int] = Form(None)
+):
+    """上传图片
+    
+    Args:
+        file: 上传的图片文件
+        paper_id: 试卷ID（可选），如果提供则保存到试卷专属文件夹
+    """
     if not file.content_type.startswith('image/'):
         raise HTTPException(status_code=400, detail="只允许上传图片文件")
     
     # 生成唯一文件名
     file_extension = os.path.splitext(file.filename)[1]
     unique_filename = f"{uuid.uuid4()}{file_extension}"
-    file_path = f"static/uploads/{unique_filename}"
     
-    # 确保上传目录存在
-    os.makedirs("static/uploads", exist_ok=True)
+    # 如果指定了试卷ID，保存到试卷专属文件夹
+    if paper_id:
+        paper_folder = f"static/uploads/paper_{paper_id}"
+        os.makedirs(paper_folder, exist_ok=True)
+        file_path = f"{paper_folder}/{unique_filename}"
+        url = f"/static/uploads/paper_{paper_id}/{unique_filename}"
+    else:
+        # 兼容旧版本，保存到根目录
+        os.makedirs("static/uploads", exist_ok=True)
+        file_path = f"static/uploads/{unique_filename}"
+        url = f"/static/uploads/{unique_filename}"
     
     # 保存文件
     with open(file_path, "wb") as buffer:
         content = await file.read()
         buffer.write(content)
     
-    return {"filename": unique_filename, "url": f"/static/uploads/{unique_filename}"}
+    return {"filename": unique_filename, "url": url}
 
 class ExportRequest(BaseModel):
     student_id: int

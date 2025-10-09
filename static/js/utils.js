@@ -54,9 +54,12 @@ class Utils {
     }
 
     // 文件上传
-    static async uploadFile(file) {
+    static async uploadFile(file, paperId = null) {
         const formData = new FormData();
         formData.append('file', file);
+        if (paperId) {
+            formData.append('paper_id', paperId);
+        }
         
         const response = await fetch('/api/upload', {
             method: 'POST',
@@ -179,6 +182,7 @@ class ImageUploader {
             maxFiles: 10,
             enableClipboard: true,  // 启用剪切板功能
             enableTextInput: false, // 是否启用文字输入
+            paperId: null,          // 试卷ID，用于按试卷分文件夹存储
             ...options
         };
         this.files = [];
@@ -322,7 +326,7 @@ class ImageUploader {
 
         for (const file of imageFiles) {
             try {
-                const result = await Utils.uploadFile(file);
+                const result = await Utils.uploadFile(file, this.options.paperId);
                 this.files.push(result);
                 this.addPreview(result);
             } catch (error) {
@@ -563,7 +567,7 @@ class ImageUploader {
                 const editedFile = new File([editedImageBlob], fileData.filename, { type: 'image/png' });
                 
                 // 上传编辑后的图片
-                const result = await Utils.uploadFile(editedFile);
+                const result = await Utils.uploadFile(editedFile, this.options.paperId);
                 
                 // 更新文件数据
                 const fileIndex = this.files.findIndex(f => f.filename === fileData.filename);
