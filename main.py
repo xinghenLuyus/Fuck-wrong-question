@@ -7,7 +7,7 @@ from api import papers, questions, students, categories, export, document_parser
 import os
 
 # 创建FastAPI应用
-app = FastAPI(title="错题管理系统", description="一个用于录入试卷、标记学生错题、导出Word的H5应用")
+app = FastAPI(title="错了喵-错题管理", description="一个用于录入试卷、标记学生错题、导出Word的H5应用")
 
 # 注册API路由
 app.include_router(categories.router)
@@ -33,6 +33,16 @@ async def startup_event():
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
+
+# Favicon路由
+@app.get("/favicon.ico")
+async def favicon():
+    """返回favicon图标"""
+    favicon_path = os.path.join("static", "favicon.ico")
+    if os.path.exists(favicon_path):
+        return FileResponse(favicon_path, media_type="image/x-icon")
+    # 如果没有favicon.ico，返回404或默认图标
+    return FileResponse(os.path.join("static", "favicon.png"), media_type="image/png") if os.path.exists(os.path.join("static", "favicon.png")) else None
 
 # 学生管理页面
 @app.get("/students", response_class=HTMLResponse)

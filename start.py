@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-错题管理系统启动脚本
+错了喵-错题管理 启动脚本
 """
 
 import sys
@@ -99,7 +99,7 @@ def stop_pdf_parser_service():
 
 def main():
     """主函数"""
-    print("🚀 错题管理系统启动器")
+    print("🚀 错了喵-错题管理 启动器")
     print("=" * 50)
     
     # 检查Python版本

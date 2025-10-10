@@ -1,4 +1,4 @@
-# 🎓 智能错题管理系统
+# 🎓 错了喵-错题管理
 
 <div align="center">
 
@@ -154,7 +154,7 @@ Fuck-wrong-question/
 ### 基础配置 (config.py)
 ```python
 # 应用信息
-APP_NAME = "错题管理系统"
+APP_NAME = "错了喵-错题管理"
 APP_VERSION = "2.0.0"
 
 # 数据库配置
