@@ -1,9 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from sqlalchemy.orm import Session
 from database.models import get_db, Paper, Question, Category
 from pydantic import BaseModel
 from typing import List, Optional
 import datetime
+from api.pdf_parser_client import get_pdf_parser_client
+from utils.markdown_parser import split_markdown_to_questions, validate_questions
+from pathlib import Path
+import tempfile
+import os
 
 router = APIRouter(prefix="/api/papers", tags=["试卷管理"])
 
@@ -147,3 +152,115 @@ async def delete_paper(paper_id: int, db: Session = Depends(get_db)):
         "deleted_images": deleted_images,
         "deleted_folder": paper_folder if os.path.exists(paper_folder) else None
     }
+
+
+@router.post("/{paper_id}/parse-pdf")
+async def parse_pdf_for_paper(
+    paper_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    """
+    上传PDF并解析为题目
+    
+    步骤：
+    1. 上传PDF到解析服务
+    2. 获取Markdown内容
+    3. 分题处理
+    4. 返回题目列表供前端确认
+    """
+    # 检查试卷是否存在
+    paper = db.query(Paper).filter(Paper.id == paper_id).first()
+    if not paper:
+        raise HTTPException(status_code=404, detail="试卷不存在")
+    
+    # 检查文件类型
+    if not file.filename.lower().endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="只支持PDF文件")
+    
+    try:
+        # 保存临时文件
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+            content = await file.read()
+            tmp_file.write(content)
+            tmp_path = tmp_file.name
+        
+        # 调用PDF解析客户端
+        client = get_pdf_parser_client()
+        parse_result = client.parse_pdf(tmp_path)
+        
+        # 获取Markdown内容
+        markdown_content = client.get_markdown(parse_result)
+        if not markdown_content:
+            raise HTTPException(status_code=500, detail="获取Markdown失败")
+        
+        # 构建图片基础URL
+        from config import PDFParserConfig
+        base_url = f"{PDFParserConfig.URL}{parse_result['auto_dir_url']}"
+        
+        # 分题处理
+        questions = split_markdown_to_questions(markdown_content, base_url)
+        
+        # 验证题目
+        validation = validate_questions(questions)
+        
+        # 删除临时文件
+        try:
+            os.unlink(tmp_path)
+        except:
+            pass
+        
+        return {
+            "success": True,
+            "message": "PDF解析成功",
+            "task_id": parse_result['task_id'],
+            "file_name": parse_result['file_name'],
+            "auto_dir_url": parse_result['auto_dir_url'],
+            "questions": questions,
+            "validation": validation,
+            "total_questions": len(questions)
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"解析失败: {str(e)}")
+
+
+@router.post("/{paper_id}/split-markdown")
+async def split_markdown(
+    paper_id: int,
+    markdown_content: str,
+    auto_dir_url: str,
+    db: Session = Depends(get_db)
+):
+    """
+    将Markdown内容分割为题目（备用接口）
+    
+    如果前端已经有Markdown内容，可以直接调用此接口分题
+    """
+    # 检查试卷是否存在
+    paper = db.query(Paper).filter(Paper.id == paper_id).first()
+    if not paper:
+        raise HTTPException(status_code=404, detail="试卷不存在")
+    
+    try:
+        # 构建图片基础URL
+        from config import PDFParserConfig
+        base_url = f"{PDFParserConfig.URL}{auto_dir_url}"
+        
+        # 分题处理
+        questions = split_markdown_to_questions(markdown_content, base_url)
+        
+        # 验证题目
+        validation = validate_questions(questions)
+        
+        return {
+            "success": True,
+            "questions": questions,
+            "validation": validation,
+            "total_questions": len(questions)
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"分题失败: {str(e)}")

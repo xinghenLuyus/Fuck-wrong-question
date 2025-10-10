@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>题目编辑</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="/static/js/utils.js"></script>
+    <style>
+        .editor-container {
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+        }
+        
+        .editor-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .editor-title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .editor-actions {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .questions-list {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .question-item {
+            position: relative;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            background: #fff;
+            transition: all 0.3s;
+        }
+        
+        .question-item:hover {
+            border-color: #007bff;
+            box-shadow: 0 4px 8px rgba(0,123,255,0.1);
+        }
+        
+        .question-item.dragging {
+            opacity: 0.5;
+        }
+        
+        .insert-area {
+            height: 4px;
+            background: transparent;
+            margin: 10px 0;
+            position: relative;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .insert-area:hover {
+            height: 40px;
+            background: #e7f3ff;
+            border: 2px dashed #007bff;
+            border-radius: 4px;
+        }
+        
+        .insert-area:hover::after {
+            content: '+ 在此插入题目';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #007bff;
+            font-weight: bold;
+        }
+        
+        .question-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #007bff;
+        }
+        
+        .question-number {
+            font-size: 18px;
+            font-weight: bold;
+            color: #007bff;
+        }
+        
+        .question-controls {
+            display: flex;
+            gap: 5px;
+        }
+        
+        .control-btn {
+            padding: 5px 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        
+        .control-btn:hover {
+            transform: scale(1.1);
+        }
+        
+        .btn-edit {
+            background: #007bff;
+            color: white;
+        }
+        
+        .btn-delete {
+            background: #dc3545;
+            color: white;
+        }
+        
+        .btn-move-up {
+            background: #28a745;
+            color: white;
+        }
+        
+        .btn-move-down {
+            background: #ffc107;
+            color: white;
+        }
+        
+        .question-content {
+            margin: 15px 0;
+        }
+        
+        .question-text {
+            font-size: 16px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            min-height: 40px;
+            margin-bottom: 10px;
+        }
+        
+        .question-text.editable {
+            border: 2px dashed #007bff;
+            padding: 10px;
+            border-radius: 4px;
+            outline: none;
+        }
+        
+        .question-text.editable:focus {
+            background: #f8f9fa;
+        }
+        
+        .question-images {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        
+        .image-wrapper {
+            position: relative;
+            display: inline-block;
+        }
+        
+        .image-wrapper img {
+            max-width: 200px;
+            max-height: 200px;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            cursor: move;
+        }
+        
+        .image-delete {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 25px;
+            height: 25px;
+            cursor: pointer;
+            display: none;
+        }
+        
+        .image-wrapper:hover .image-delete {
+            display: block;
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+        
+        .btn-primary {
+            background: #007bff;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #0056b3;
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .btn-secondary:hover {
+            background: #545b62;
+        }
+        
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background: #218838;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+        }
+        
+        .modal-content {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            min-width: 400px;
+            max-width: 90%;
+        }
+        
+        .modal-header {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        
+        .form-group textarea {
+            width: 100%;
+            min-height: 100px;
+            padding: 10px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 14px;
+            resize: vertical;
+        }
+        
+        .form-group input[type="file"] {
+            width: 100%;
+            padding: 5px;
+        }
+        
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        .image-preview {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .image-preview img {
+            max-width: 150px;
+            max-height: 150px;
+            border-radius: 4px;
+        }
+        
+        .paste-hint {
+            margin-top: 10px;
+            padding: 10px;
+            background: #e7f3ff;
+            border-radius: 4px;
+            font-size: 14px;
+            color: #0c5460;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #6c757d;
+        }
+        
+        .empty-state-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container editor-container">
+        <!-- 编辑器头部 -->
+        <div class="editor-header">
+            <div class="editor-title">
+                📝 题目编辑器
+                <span id="paperName" style="font-size: 16px; color: #6c757d;"></span>
+            </div>
+            <div class="editor-actions">
+                <button class="btn btn-secondary" onclick="goBack()">返回</button>
+                <button class="btn btn-success" onclick="saveAllChanges()">💾 保存所有更改</button>
+            </div>
+        </div>
+        
+        <!-- 题目列表 -->
+        <div class="questions-list">
+            <div id="questionsList"></div>
+            
+            <!-- 空状态 -->
+            <div id="emptyState" class="empty-state" style="display: none;">
+                <div class="empty-state-icon">📄</div>
+                <h3>暂无题目</h3>
+                <p>点击下方按钮添加第一道题目</p>
+                <button class="btn btn-primary" onclick="insertQuestionAt(1)">➕ 添加题目</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 编辑题目模态框 -->
+    <div id="editModal" class="modal">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">编辑题目</div>
+            <form id="editForm" onsubmit="return false;">
+                <input type="hidden" id="editQuestionId">
+                
+                <!-- 使用 ImageUploader 组件 -->
+                <div id="editImageUploader"></div>
+                
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeEditModal()">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="saveEdit()">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <script>
+        const paperId = new URLSearchParams(window.location.search).get('paper_id');
+        if (!paperId) {
+            alert('缺少试卷ID参数');
+            window.location.href = '/';
+        }
+        
+        let questions = [];
+        let editImageUploader = null;
+        
+        // 加载题目列表
+        async function loadQuestions() {
+            try {
+                const response = await fetch(`/api/questions/paper/${paperId}`);
+                const data = await response.json();
+                
+                if (Array.isArray(data)) {
+                    questions = data;
+                } else {
+                    questions = [];
+                }
+                
+                renderQuestions();
+                
+                // 加载试卷信息
+                loadPaperInfo();
+                
+            } catch (error) {
+                console.error('加载题目失败:', error);
+                alert('加载题目失败: ' + error.message);
+            }
+        }
+        
+        // 加载试卷信息
+        async function loadPaperInfo() {
+            try {
+                const response = await fetch(`/api/papers/${paperId}`);
+                const paper = await response.json();
+                document.getElementById('paperName').textContent = ` - ${paper.name}`;
+            } catch (error) {
+                console.error('加载试卷信息失败:', error);
+            }
+        }
+        
+        // 渲染题目列表
+        function renderQuestions() {
+            const container = document.getElementById('questionsList');
+            const emptyState = document.getElementById('emptyState');
+            
+            if (questions.length === 0) {
+                container.innerHTML = '';
+                emptyState.style.display = 'block';
+                return;
+            }
+            
+            emptyState.style.display = 'none';
+            
+            let html = '<div class="insert-area" onclick="insertQuestionAt(1)"></div>';
+            
+            questions.forEach((q, index) => {
+                const images = q.image_urls ? q.image_urls.split(',').filter(url => url.trim()) : [];
+                
+                html += `
+                    <div class="question-item" data-question-id="${q.id}">
+                        <div class="question-header">
+                            <div class="question-number">第 ${q.question_no} 题</div>
+                            <div class="question-controls">
+                                ${index > 0 ? `<button class="control-btn btn-move-up" onclick="moveQuestion(${q.id}, ${q.question_no - 1})">↑</button>` : ''}
+                                ${index < questions.length - 1 ? `<button class="control-btn btn-move-down" onclick="moveQuestion(${q.id}, ${q.question_no + 1})">↓</button>` : ''}
+                                <button class="control-btn btn-edit" onclick="editQuestion(${q.id})">✏️ 编辑</button>
+                                <button class="control-btn btn-delete" onclick="deleteQuestion(${q.id})">🗑️ 删除</button>
+                            </div>
+                        </div>
+                        <div class="question-content">
+                            <div class="question-text">${q.question_text || '<em style="color: #999;">（无文字内容）</em>'}</div>`;
+                
+                if (images.length > 0) {
+                    html += '<div class="question-images">';
+                    images.forEach((url, imgIndex) => {
+                        html += `
+                            <div class="image-wrapper" draggable="true" 
+                                 ondragstart="handleImageDragStart(event, ${q.id}, ${imgIndex})"
+                                 ondragover="handleImageDragOver(event)"
+                                 ondrop="handleImageDrop(event, ${q.id}, ${imgIndex})">
+                                <img src="${url.trim()}" alt="题目图片" onclick="window.open('${url.trim()}', '_blank')">
+                                <button class="image-delete" onclick="deleteImage(${q.id}, ${imgIndex})">×</button>
+                            </div>`;
+                    });
+                    html += '</div>';
+                }
+                
+                html += `
+                        </div>
+                    </div>
+                    <div class="insert-area" onclick="insertQuestionAt(${q.question_no + 1})"></div>
+                `;
+            });
+            
+            container.innerHTML = html;
+        }
+        
+        // 编辑题目
+        function editQuestion(questionId) {
+            const question = questions.find(q => q.id === questionId);
+            if (!question) return;
+            
+            // 初始化 ImageUploader（如果尚未初始化）
+            if (!editImageUploader) {
+                const uploaderContainer = document.getElementById('editImageUploader');
+                editImageUploader = new ImageUploader(uploaderContainer, {
+                    multiple: true,
+                    maxFiles: 10,
+                    enableClipboard: true,
+                    enableTextInput: true,
+                    paperId: paperId
+                });
+            }
+            
+            // 设置题目 ID
+            document.getElementById('editQuestionId').value = questionId;
+            
+            // 加载既有数据（文字和图片）
+            editImageUploader.loadExistingImages(
+                question.image_urls || '', 
+                question.question_text || ''
+            );
+            
+            document.getElementById('editModal').style.display = 'block';
+        }
+        
+        // 关闭编辑模态框
+        function closeEditModal() {
+            document.getElementById('editModal').style.display = 'none';
+        }
+        
+        // 保存编辑
+        async function saveEdit() {
+            const questionId = document.getElementById('editQuestionId').value;
+            
+            // 从 ImageUploader 获取文字和图片
+            const questionText = editImageUploader.getTextContent();
+            const imageUrls = editImageUploader.getUrls();
+            
+            try {
+                const response = await fetch(`/api/questions/${questionId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        question_text: questionText,
+                        image_urls: imageUrls
+                    })
+                });
+                
+                if (response.ok) {
+                    closeEditModal();
+                    loadQuestions();
+                    Utils.showSuccess('保存成功！');
+                } else {
+                    throw new Error('保存失败');
+                }
+                
+            } catch (error) {
+                console.error('保存失败:', error);
+                Utils.showError('保存失败: ' + error.message);
+            }
+        }
+        
+        // 删除题目
+        async function deleteQuestion(questionId) {
+            if (!confirm('确定要删除这道题目吗？')) return;
+            
+            try {
+                const response = await fetch(`/api/questions/${questionId}/reorder`, {
+                    method: 'DELETE'
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    loadQuestions();
+                } else {
+                    throw new Error(result.message || '删除失败');
+                }
+                
+            } catch (error) {
+                console.error('删除失败:', error);
+                alert('删除失败: ' + error.message);
+            }
+        }
+        
+        // 移动题目
+        async function moveQuestion(questionId, newPosition) {
+            try {
+                const response = await fetch(`/api/questions/${questionId}/move`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ new_position: newPosition })
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    loadQuestions();
+                } else {
+                    throw new Error(result.message || '移动失败');
+                }
+                
+            } catch (error) {
+                console.error('移动失败:', error);
+                alert('移动失败: ' + error.message);
+            }
+        }
+        
+        // 插入新题目
+        async function insertQuestionAt(position) {
+            try {
+                const response = await fetch(`/api/questions/paper/${paperId}/insert`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        insert_position: position,
+                        question_text: '（待编辑）',
+                        image_urls: []
+                    })
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    // 重新加载题目列表
+                    await loadQuestions();
+                    // 找到新插入的题目（在position位置）
+                    const newQuestion = questions.find(q => q.question_no === position);
+                    if (newQuestion) {
+                        // 直接打开编辑模态框
+                        editQuestion(newQuestion.id);
+                    }
+                } else {
+                    throw new Error(result.message || '插入失败');
+                }
+                
+            } catch (error) {
+                console.error('插入失败:', error);
+                Utils.showError('插入失败: ' + error.message);
+            }
+        }
+        
+        // 删除图片
+        async function deleteImage(questionId, imageIndex) {
+            if (!confirm('确定要删除这张图片吗？')) return;
+            
+            const question = questions.find(q => q.id === questionId);
+            if (!question) return;
+            
+            const images = question.image_urls.split(',').filter(url => url.trim());
+            images.splice(imageIndex, 1);
+            
+            try {
+                const response = await fetch(`/api/questions/${questionId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        image_urls: images.join(',')
+                    })
+                });
+                
+                if (response.ok) {
+                    loadQuestions();
+                } else {
+                    throw new Error('删除失败');
+                }
+                
+            } catch (error) {
+                console.error('删除图片失败:', error);
+                Utils.showError('删除图片失败: ' + error.message);
+            }
+        }
+        
+        // 图片拖拽相关
+        let draggedImage = null;
+        
+        function handleImageDragStart(event, questionId, imageIndex) {
+            draggedImage = { questionId, imageIndex };
+            event.dataTransfer.effectAllowed = 'move';
+        }
+        
+        function handleImageDragOver(event) {
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'move';
+        }
+        
+        function handleImageDrop(event, targetQuestionId, targetImageIndex) {
+            event.preventDefault();
+            if (!draggedImage) return;
+            
+            // TODO: 实现图片在题目间移动的逻辑（暂不支持跨题目拖拽）
+            console.log('移动图片', draggedImage, '到', targetQuestionId, targetImageIndex);
+            
+            draggedImage = null;
+        }
+        
+        // 保存所有更改
+        function saveAllChanges() {
+            if (!paperId) {
+                alert('试卷ID丢失，无法跳转');
+                return;
+            }
+            Utils.showSuccess('所有更改已自动保存');
+            setTimeout(() => {
+                const targetUrl = `/preview/${paperId}`;
+                console.log('正在跳转到:', targetUrl);
+                window.location.href = targetUrl;
+            }, 1000);
+        }
+        
+        // 返回
+        function goBack() {
+            window.location.href = `/preview/${paperId}`;
+        }
+        
+        // 页面加载时初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            loadQuestions();
+        });
+        
+        // 点击模态框外部关闭
+        window.onclick = function(event) {
+            const modal = document.getElementById('editModal');
+            if (event.target === modal) {
+                closeEditModal();
+            }
+        };
+    </script>
+</body>
+</html>

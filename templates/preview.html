@@ -109,11 +109,12 @@
 
         <!-- 试卷信息 -->
         <div class="card">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <h2 class="card-title" id="paper-name-title">📋 加载中...</h2>
+                <button onclick="goToEditMode()" class="btn btn-warning" style="background: #ff9800;">✏️ 进入编辑模式</button>
+            </div>
             <div id="paper-info">
-                <div style="text-align: center; padding: 20px; color: #7f8c8d;">
-                    <div class="loading"></div>
-                    <p style="margin-top: 10px;">加载试卷信息...</p>
-                </div>
+                <p style="color: #7f8c8d; margin-top: 10px;">加载试卷信息...</p>
             </div>
         </div>
 
@@ -256,10 +257,10 @@
 
         // 渲染试卷信息
         function renderPaperInfo() {
+            // 更新标题
+            document.getElementById('paper-name-title').textContent = `📋 ${paper.name}`;
+            // 更新信息
             document.getElementById('paper-info').innerHTML = `
-                <div class="card-header">
-                    <h2 class="card-title">📋 ${paper.name}</h2>
-                </div>
                 <p style="color: #7f8c8d; margin-top: 10px;">
                     试卷ID: ${paper.id} | 共 ${questions.length} 道题目
                 </p>
@@ -1007,6 +1008,11 @@
         // 添加题目
         function addQuestion() {
             Utils.redirect(`/add_question/${paperId}`);
+        }
+
+        // 进入编辑模式
+        function goToEditMode() {
+            Utils.redirect(`/question_edit.html?paper_id=${paperId}`);
         }
 
         // 查看图片

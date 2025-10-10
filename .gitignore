@@ -20,7 +20,6 @@ wheels/
 .installed.cfg
 *.egg
 MANIFEST
-MinerU/
 
 # Virtual Environment
 venv/
@@ -52,11 +51,10 @@ Thumbs.db
 # Logs
 *.log
 
-# Environment variables
-.env
-.env.local
-.env.production
-
-# Temporary files
-tmp/
-temp/
+# mineru
+pdf_service/temp/*
+!pdf_service/temp/.gitkeep
+pdf_service/output/*
+!pdf_service/output/.gitkeep
+pdf_service/pdfs/*
+!pdf_service/pdfs/.gitkeep

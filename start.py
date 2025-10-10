@@ -6,8 +6,13 @@
 
 import sys
 import os
+import atexit
 import uvicorn
 from pathlib import Path
+
+# PDF解析服务管理器
+_pdf_service_manager = None
+
 
 def check_dependencies():
     """检查依赖是否安装"""
@@ -20,7 +25,8 @@ def check_dependencies():
         'python-docx': 'docx',            # 安装名 -> 导入名
         'Pillow': 'PIL',                  # 安装名 -> 导入名
         'aiofiles': 'aiofiles',
-        'jinja2': 'jinja2'
+        'jinja2': 'jinja2',
+        'python-dotenv': 'dotenv'
     }
     
     missing_packages = []
@@ -40,6 +46,56 @@ def check_dependencies():
         return False
     
     return True
+
+
+def start_pdf_parser_service():
+    """启动PDF解析服务（如果配置为本地模式）"""
+    global _pdf_service_manager
+    
+    try:
+        from config import PDFParserConfig
+        from services.pdf_service_manager import PDFServiceManager
+        
+        # 检查是否需要启动
+        if PDFParserConfig.MODE != 'local':
+            print(f"📄 PDF解析模式: {PDFParserConfig.MODE}")
+            if PDFParserConfig.MODE == 'remote':
+                print(f"   远程服务地址: {PDFParserConfig.URL}")
+            return
+        
+        if not PDFParserConfig.AUTO_START:
+            print("📄 PDF解析服务: 手动模式（需要手动启动）")
+            return
+        
+        print("📄 启动PDF解析服务（本地模式）...")
+        _pdf_service_manager = PDFServiceManager()
+        
+        try:
+            _pdf_service_manager.start(timeout=30)
+            print(f"   ✅ PDF解析服务已启动: {PDFParserConfig.URL}")
+        except FileNotFoundError as e:
+            print(f"   ⚠️  {e}")
+            print("   提示: PDF解析功能将不可用，其他功能正常")
+        except TimeoutError as e:
+            print(f"   ⚠️  {e}")
+            print("   提示: PDF解析功能将不可用，其他功能正常")
+        except Exception as e:
+            print(f"   ⚠️  启动PDF解析服务失败: {e}")
+            print("   提示: PDF解析功能将不可用，其他功能正常")
+    
+    except ImportError:
+        print("⚠️  PDF解析服务模块未安装，跳过启动")
+
+
+def stop_pdf_parser_service():
+    """停止PDF解析服务"""
+    global _pdf_service_manager
+    
+    if _pdf_service_manager is not None:
+        print("\n📄 停止PDF解析服务...")
+        _pdf_service_manager.stop()
+        _pdf_service_manager = None
+
 
 def main():
     """主函数"""
@@ -65,6 +121,12 @@ def main():
     os.makedirs("static/uploads", exist_ok=True)
     print("✅ 目录结构检查完成")
     
+    # 启动PDF解析服务
+    start_pdf_parser_service()
+    
+    # 注册退出时清理
+    atexit.register(stop_pdf_parser_service)
+    
     # 启动应用
     print("\n🌐 启动Web服务器...")
     print("📱 访问地址: http://localhost:8000")
@@ -80,6 +142,8 @@ def main():
         )
     except KeyboardInterrupt:
         print("\n👋 服务已停止")
+    finally:
+        stop_pdf_parser_service()
 
 if __name__ == "__main__":
     main()

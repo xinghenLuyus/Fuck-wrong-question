@@ -88,10 +88,9 @@
                     
                     <div class="mode-option" onclick="selectAutoMode()">
                         <div class="mode-icon">🤖</div>
-                        <h4>自动识别试卷</h4>
-                        <p class="beta-text">测试版，无OCR - 支持Word/PDF文档解析</p>
+                        <h4>自动识别PDF试卷</h4>
+                        <p class="beta-text">测试版，支持OCR，图片智能切分</p>
                         <div class="mode-features">
-                            <span class="feature-tag">✓ 批量导入</span>
                             <span class="feature-tag">✓ 智能切分</span>
                             <span class="feature-tag beta">测试版</span>
                         </div>
@@ -546,13 +545,15 @@
             try {
                 const paper = await Utils.post('/api/papers/', paperData);
                 Utils.showSuccess('试卷创建成功');
-                closeModal('add-paper-modal');
                 
-                // 刷新文件管理器
-                loadFileManager();
+                // 先关闭添加试卷模态框
+                closeModal('add-paper-modal');
                 
                 // 显示添加题目方式选择模态框
                 showAddQuestionModeModal(paper.id);
+                
+                // 最后刷新文件管理器（在后台进行）
+                loadFileManager();
             } catch (error) {
                 Utils.showError('创建失败: ' + error.message);
             } finally {
@@ -665,7 +666,8 @@
             }
             
             closeModal('add-question-mode-modal');
-            Utils.redirect(`/auto_parse/${window.currentPaperId}`);
+            // 跳转到PDF自动导入页面
+            Utils.redirect(`/pdf_import.html?paper_id=${window.currentPaperId}`);
         }
 
 

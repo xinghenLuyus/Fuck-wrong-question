@@ -49,15 +49,20 @@ async def add_paper_page(request: Request):
 async def add_question_page(request: Request, paper_id: int):
     return templates.TemplateResponse("add_question.html", {"request": request, "paper_id": paper_id})
 
-# 自动解析试卷页面
-@app.get("/auto_parse/{paper_id}", response_class=HTMLResponse)
-async def auto_parse_page(request: Request, paper_id: int):
-    return templates.TemplateResponse("auto_parse.html", {"request": request, "paper_id": paper_id})
-
 # 试卷预览页面
 @app.get("/preview/{paper_id}", response_class=HTMLResponse)
 async def preview_page(request: Request, paper_id: int):
     return templates.TemplateResponse("preview.html", {"request": request, "paper_id": paper_id})
+
+# PDF导入页面
+@app.get("/pdf_import.html", response_class=HTMLResponse)
+async def pdf_import_page(request: Request):
+    return templates.TemplateResponse("pdf_import.html", {"request": request})
+
+# 题目编辑页面
+@app.get("/question_edit.html", response_class=HTMLResponse)
+async def question_edit_page(request: Request):
+    return templates.TemplateResponse("question_edit.html", {"request": request})
 
 # 导出预览页面（支持单个或多个学生ID，用逗号分隔）
 @app.get("/export_preview/{paper_id}/{student_id}", response_class=HTMLResponse)
