@@ -5,38 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>学生管理 - 错了喵-错题管理</title>
     <link rel="stylesheet" href="/static/css/style.css">
-    <!-- 拼音库 - 使用多个CDN备用 -->
-    <script>
-        // CDN 备用加载方案
-        (function() {
-            const cdns = [
-                'https://cdn.jsdelivr.net/npm/pinyin-pro@3.19.6/dist/index.js',
-                'https://unpkg.com/pinyin-pro@3.19.6/dist/index.js',
-                'https://cdn.bootcdn.net/ajax/libs/pinyin-pro/3.19.6/index.js'
-            ];
-            
-            let loaded = false;
-            let currentIndex = 0;
-            
-            function loadNextCDN() {
-                if (loaded || currentIndex >= cdns.length) return;
-                
-                const script = document.createElement('script');
-                script.src = cdns[currentIndex];
-                script.onload = function() {
-                    loaded = true;
-                };
-                script.onerror = function() {
-                    console.warn('❌ CDN 加载失败:', cdns[currentIndex]);
-                    currentIndex++;
-                    loadNextCDN();
-                };
-                document.head.appendChild(script);
-            }
-            
-            loadNextCDN();
-        })();
-    </script>
+    <!-- 拼音库 -->
+    <script src="/static/js/pinyin-pro.min.js"></script>
 </head>
 <body>
     <div class="container">
@@ -189,7 +159,7 @@
 
     <script src="/static/js/utils.js"></script>
     <!-- 引入 SheetJS 用于解析 Excel -->
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="/static/js/xlsx.full.min.js"></script>
     <script>
         let students = [];
         let classes = [];

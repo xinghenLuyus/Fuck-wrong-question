@@ -167,11 +167,68 @@
             display: flex;
             flex-wrap: wrap;
             gap: 10px;
+            padding: 5px;
+        }
+        
+        .question-content {
+            position: relative;
+            transition: all 0.2s ease;
+            min-height: 40px;
+        }
+        
+        .question-content.drag-over {
+            background: rgba(0, 123, 255, 0.05);
+            border-left: 3px solid #007bff;
+            padding-left: 10px;
+            margin-left: -3px;
+        }
+        
+        .drop-hint {
+            position: absolute;
+            bottom: 5px;
+            right: 5px;
+            color: #007bff;
+            font-size: 12px;
+            padding: 6px 10px;
+            background: rgba(0, 123, 255, 0.15);
+            border-radius: 4px;
+            display: inline-block;
+            pointer-events: none;
+            animation: fadeIn 0.2s ease;
+            box-shadow: 0 2px 4px rgba(0, 123, 255, 0.2);
+            z-index: 10;
+        }
+        
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-5px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
         
         .image-wrapper {
             position: relative;
             display: inline-block;
+            transition: all 0.2s ease;
+            cursor: move;
+        }
+        
+        .image-wrapper:hover {
+            transform: scale(1.02);
+        }
+        
+        .image-wrapper.dragging {
+            opacity: 0.5;
+        }
+        
+        .image-wrapper.drag-over {
+            border: 2px dashed #007bff;
+            background: rgba(0, 123, 255, 0.1);
+            border-radius: 4px;
         }
         
         .image-wrapper img {
@@ -179,7 +236,8 @@
             max-height: 200px;
             border-radius: 4px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            cursor: move;
+            cursor: pointer;
+            pointer-events: none;
         }
         
         .image-delete {
@@ -194,6 +252,7 @@
             height: 25px;
             cursor: pointer;
             display: none;
+            z-index: 10;
         }
         
         .image-wrapper:hover .image-delete {
@@ -450,18 +509,24 @@
                                 <button class="control-btn btn-delete" onclick="deleteQuestion(${q.id})">🗑️ 删除</button>
                             </div>
                         </div>
-                        <div class="question-content">
+                        <div class="question-content" 
+                             data-question-id="${q.id}"
+                             ondragover="handleQuestionContentDragOver(event, ${q.id})"
+                             ondragleave="handleQuestionContentDragLeave(event)"
+                             ondrop="handleImageContainerDrop(event, ${q.id})">
                             <div class="question-text">${q.question_text || '<em style="color: #999;">（无文字内容）</em>'}</div>`;
                 
                 if (images.length > 0) {
-                    html += '<div class="question-images">';
+                    html += `<div class="question-images">`;
                     images.forEach((url, imgIndex) => {
                         html += `
                             <div class="image-wrapper" draggable="true" 
                                  ondragstart="handleImageDragStart(event, ${q.id}, ${imgIndex})"
                                  ondragover="handleImageDragOver(event)"
-                                 ondrop="handleImageDrop(event, ${q.id}, ${imgIndex})">
-                                <img src="${url.trim()}" alt="题目图片" onclick="window.open('${url.trim()}', '_blank')">
+                                 ondragleave="handleImageDragLeave(event)"
+                                 ondrop="handleImageDrop(event, ${q.id}, ${imgIndex})"
+                                 ondragend="handleImageDragEnd(event)">
+                                <img src="${url.trim()}" alt="题目图片" onclick="Utils.showImageModal('${url.trim()}')">
                                 <button class="image-delete" onclick="deleteImage(${q.id}, ${imgIndex})">×</button>
                             </div>`;
                     });
@@ -654,25 +719,263 @@
         
         // 图片拖拽相关
         let draggedImage = null;
+        let draggedElement = null;
         
         function handleImageDragStart(event, questionId, imageIndex) {
             draggedImage = { questionId, imageIndex };
+            draggedElement = event.target;
             event.dataTransfer.effectAllowed = 'move';
+            
+            // 添加拖拽中的样式
+            setTimeout(() => {
+                event.target.classList.add('dragging');
+            }, 0);
         }
         
         function handleImageDragOver(event) {
             event.preventDefault();
+            event.stopPropagation();
             event.dataTransfer.dropEffect = 'move';
+            
+            // 添加悬停样式
+            const wrapper = event.currentTarget;
+            if (wrapper && wrapper !== draggedElement) {
+                wrapper.classList.add('drag-over');
+            }
         }
         
-        function handleImageDrop(event, targetQuestionId, targetImageIndex) {
+        function handleImageDragLeave(event) {
+            event.stopPropagation();
+            // 移除悬停样式
+            const wrapper = event.currentTarget;
+            if (wrapper) {
+                wrapper.classList.remove('drag-over');
+            }
+        }
+        
+        async function handleImageDrop(event, targetQuestionId, targetImageIndex) {
             event.preventDefault();
+            event.stopPropagation();
+            
+            // 移除所有拖拽样式
+            document.querySelectorAll('.image-wrapper').forEach(el => {
+                el.classList.remove('drag-over');
+            });
+            
             if (!draggedImage) return;
             
-            // TODO: 实现图片在题目间移动的逻辑（暂不支持跨题目拖拽）
-            console.log('移动图片', draggedImage, '到', targetQuestionId, targetImageIndex);
+            const sourceQuestionId = draggedImage.questionId;
+            const sourceImageIndex = draggedImage.imageIndex;
+            
+            // 如果是同一位置，不做任何操作
+            if (sourceQuestionId === targetQuestionId && sourceImageIndex === targetImageIndex) {
+                draggedImage = null;
+                draggedElement = null;
+                return;
+            }
+            
+            try {
+                const sourceQuestion = questions.find(q => q.id === sourceQuestionId);
+                const targetQuestion = questions.find(q => q.id === targetQuestionId);
+                
+                if (!sourceQuestion || !targetQuestion) {
+                    throw new Error('找不到题目');
+                }
+                
+                // 解析图片URL
+                const sourceImages = sourceQuestion.image_urls.split(',').filter(url => url.trim());
+                const targetImages = targetQuestion.image_urls.split(',').filter(url => url.trim());
+                
+                // 获取被拖拽的图片URL
+                const draggedImageUrl = sourceImages[sourceImageIndex];
+                
+                if (sourceQuestionId === targetQuestionId) {
+                    // 同一题目内移动图片
+                    sourceImages.splice(sourceImageIndex, 1);
+                    sourceImages.splice(targetImageIndex, 0, draggedImageUrl);
+                    
+                    // 更新题目
+                    await fetch(`/api/questions/${sourceQuestionId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            image_urls: sourceImages.join(',')
+                        })
+                    });
+                    
+                } else {
+                    // 跨题目移动图片
+                    // 从源题目删除图片
+                    sourceImages.splice(sourceImageIndex, 1);
+                    
+                    // 添加到目标题目
+                    targetImages.splice(targetImageIndex, 0, draggedImageUrl);
+                    
+                    // 更新两个题目
+                    await Promise.all([
+                        fetch(`/api/questions/${sourceQuestionId}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                image_urls: sourceImages.join(',')
+                            })
+                        }),
+                        fetch(`/api/questions/${targetQuestionId}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                image_urls: targetImages.join(',')
+                            })
+                        })
+                    ]);
+                }
+                
+                // 重新加载题目列表
+                await loadQuestions();
+                Utils.showSuccess('图片移动成功');
+                
+            } catch (error) {
+                console.error('移动图片失败:', error);
+                Utils.showError('移动图片失败: ' + error.message);
+            }
             
             draggedImage = null;
+            draggedElement = null;
+        }
+        
+        function handleImageDragEnd(event) {
+            // 移除所有拖拽相关样式
+            event.target.classList.remove('dragging');
+            document.querySelectorAll('.image-wrapper, .question-content').forEach(el => {
+                el.classList.remove('drag-over');
+            });
+            
+            draggedImage = null;
+            draggedElement = null;
+        }
+        
+        // 处理题目内容区域的拖放（只在拖拽时显示提示）
+        function handleQuestionContentDragOver(event, questionId) {
+            // 如果点击到了图片wrapper或其子元素，让图片wrapper自己处理
+            if (event.target.closest('.image-wrapper')) {
+                return;
+            }
+            
+            event.preventDefault();
+            event.stopPropagation();
+            
+            // 只处理跨题目的拖拽
+            if (!draggedImage || draggedImage.questionId === questionId) {
+                return;
+            }
+            
+            event.dataTransfer.dropEffect = 'move';
+            
+            const content = event.currentTarget;
+            content.classList.add('drag-over');
+            
+            // 动态添加提示文字（如果还没有）
+            if (!content.querySelector('.drop-hint')) {
+                const hint = document.createElement('div');
+                hint.className = 'drop-hint';
+                
+                // 根据是否有图片显示不同的提示
+                const hasImages = content.querySelector('.question-images');
+                hint.textContent = hasImages ? '📷 添加到此题目' : '📷 拖放图片到此题目';
+                
+                content.appendChild(hint);
+            }
+        }
+        
+        function handleQuestionContentDragLeave(event) {
+            // 如果移动到子元素（如图片），不移除样式
+            if (event.currentTarget.contains(event.relatedTarget)) {
+                return;
+            }
+            
+            event.stopPropagation();
+            const content = event.currentTarget;
+            content.classList.remove('drag-over');
+            
+            // 移除提示文字
+            const hint = content.querySelector('.drop-hint');
+            if (hint) {
+                hint.remove();
+            }
+        }
+        
+        async function handleImageContainerDrop(event, targetQuestionId) {
+            event.preventDefault();
+            event.stopPropagation();
+            
+            // 移除所有拖拽样式和提示
+            document.querySelectorAll('.image-wrapper, .question-content').forEach(el => {
+                el.classList.remove('drag-over');
+            });
+            document.querySelectorAll('.drop-hint').forEach(hint => hint.remove());
+            
+            if (!draggedImage) return;
+            
+            const sourceQuestionId = draggedImage.questionId;
+            const sourceImageIndex = draggedImage.imageIndex;
+            
+            // 如果拖到同一题目，不做处理
+            if (sourceQuestionId === targetQuestionId) {
+                draggedImage = null;
+                draggedElement = null;
+                return;
+            }
+            
+            try {
+                const sourceQuestion = questions.find(q => q.id === sourceQuestionId);
+                const targetQuestion = questions.find(q => q.id === targetQuestionId);
+                
+                if (!sourceQuestion || !targetQuestion) {
+                    throw new Error('找不到题目');
+                }
+                
+                // 解析图片URL
+                const sourceImages = sourceQuestion.image_urls.split(',').filter(url => url.trim());
+                const targetImages = targetQuestion.image_urls ? targetQuestion.image_urls.split(',').filter(url => url.trim()) : [];
+                
+                // 获取被拖拽的图片URL
+                const draggedImageUrl = sourceImages[sourceImageIndex];
+                
+                // 从源题目删除图片
+                sourceImages.splice(sourceImageIndex, 1);
+                
+                // 添加到目标题目末尾
+                targetImages.push(draggedImageUrl);
+                
+                // 更新两个题目
+                await Promise.all([
+                    fetch(`/api/questions/${sourceQuestionId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            image_urls: sourceImages.join(',')
+                        })
+                    }),
+                    fetch(`/api/questions/${targetQuestionId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            image_urls: targetImages.join(',')
+                        })
+                    })
+                ]);
+                
+                // 重新加载题目列表
+                await loadQuestions();
+                Utils.showSuccess('图片移动成功');
+                
+            } catch (error) {
+                console.error('移动图片失败:', error);
+                Utils.showError('移动图片失败: ' + error.message);
+            }
+            
+            draggedImage = null;
+            draggedElement = null;
         }
         
         // 保存所有更改

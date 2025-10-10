@@ -6,24 +6,7 @@
     <title>导出预览 - 错了喵-错题管理</title>
     <link rel="stylesheet" href="/static/css/style.css">
     <!-- 拼音库 -->
-    <script>
-        (function() {
-            const cdns = [
-                'https://cdn.jsdelivr.net/npm/pinyin-pro@3.19.6/dist/index.js',
-                'https://unpkg.com/pinyin-pro@3.19.6/dist/index.js'
-            ];
-            let loaded = false, currentIndex = 0;
-            function loadNextCDN() {
-                if (loaded || currentIndex >= cdns.length) return;
-                const script = document.createElement('script');
-                script.src = cdns[currentIndex];
-                script.onload = () => { loaded = true; console.log('✅ pinyin-pro 库加载成功'); };
-                script.onerror = () => { currentIndex++; loadNextCDN(); };
-                document.head.appendChild(script);
-            }
-            loadNextCDN();
-        })();
-    </script>
+    <script src="/static/js/pinyin-pro.min.js"></script>
 </head>
 <body>
     <div class="container">

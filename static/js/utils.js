@@ -171,6 +171,56 @@ class Utils {
         link.click();
         document.body.removeChild(link);
     }
+
+    // 显示图片大图模态框（全局静态方法）
+    static showImageModal(imageUrl) {
+        // 创建模态框
+        const modal = document.createElement('div');
+        modal.className = 'image-modal';
+        modal.innerHTML = `
+            <div class="image-modal-content">
+                <span class="image-modal-close">&times;</span>
+                <img src="${imageUrl}" class="image-modal-img">
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        // 点击关闭按钮关闭模态框
+        const closeBtn = modal.querySelector('.image-modal-close');
+        closeBtn.addEventListener('click', () => {
+            modal.remove();
+        });
+        
+        // 点击模态框背景关闭
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.remove();
+            }
+        });
+        
+        // ESC键关闭
+        const escHandler = (e) => {
+            if (e.key === 'Escape') {
+                modal.remove();
+                document.removeEventListener('keydown', escHandler);
+            }
+        };
+        document.addEventListener('keydown', escHandler);
+        
+        // 模态框移除时清理事件监听
+        const observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                mutation.removedNodes.forEach((node) => {
+                    if (node === modal) {
+                        document.removeEventListener('keydown', escHandler);
+                        observer.disconnect();
+                    }
+                });
+            });
+        });
+        observer.observe(document.body, { childList: true });
+    }
 }
 
 // 图片上传组件
@@ -350,20 +400,23 @@ class ImageUploader {
         previewItem.innerHTML = `
             <img src="${fileData.url}" alt="${fileData.filename}" class="${imageClass}">
             <div class="preview-actions">
-                <button type="button" class="preview-edit" data-filename="${fileData.filename}" title="编辑图片">✂️</button>
                 <button type="button" class="preview-remove" data-filename="${fileData.filename}" title="删除图片">${deleteButtonText}</button>
             </div>
         `;
+
+        // 图片点击查看大图
+        const img = previewItem.querySelector('img');
+        img.style.cursor = 'pointer';
+        img.addEventListener('click', (e) => {
+            // 阻止事件冒泡，避免触发其他事件
+            e.stopPropagation();
+            this.showImageModal(fileData.url);
+        });
 
         const removeBtn = previewItem.querySelector('.preview-remove');
         removeBtn.addEventListener('click', () => {
             this.removeFile(fileData.filename);
             previewItem.remove();
-        });
-
-        const editBtn = previewItem.querySelector('.preview-edit');
-        editBtn.addEventListener('click', () => {
-            this.editImage(fileData);
         });
 
         this.previewArea.appendChild(previewItem);
@@ -432,233 +485,12 @@ class ImageUploader {
         }
     }
 
-    // 编辑图片
-    editImage(fileData) {
-        // 创建图片编辑模态框
-        const modal = document.createElement('div');
-        modal.className = 'image-edit-modal';
-        modal.innerHTML = `
-            <div class="image-edit-content">
-                <div class="image-edit-header">
-                    <h3>编辑图片</h3>
-                    <button class="close-btn" onclick="this.closest('.image-edit-modal').remove()">×</button>
-                </div>
-                <div class="image-edit-body">
-                    <div class="image-edit-container">
-                        <canvas id="edit-canvas"></canvas>
-                    </div>
-                    <div class="image-edit-controls">
-                        <div class="control-group">
-                            <label>裁剪工具:</label>
-                            <button id="crop-btn" class="btn btn-primary">开始裁剪</button>
-                            <button id="reset-btn" class="btn btn-secondary">重置</button>
-                        </div>
-                        <div class="control-group">
-                            <label>旋转:</label>
-                            <button id="rotate-left" class="btn btn-secondary">↺ 左转90°</button>
-                            <button id="rotate-right" class="btn btn-secondary">↻ 右转90°</button>
-                        </div>
-                        <div class="control-group">
-                            <label>缩放:</label>
-                            <input type="range" id="scale-slider" min="0.1" max="3" step="0.1" value="1">
-                            <span id="scale-value">100%</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="image-edit-footer">
-                    <button id="save-edit" class="btn btn-success">保存修改</button>
-                    <button onclick="this.closest('.image-edit-modal').remove()" class="btn btn-secondary">取消</button>
-                </div>
-            </div>
-        `;
-
-        document.body.appendChild(modal);
-        
-        // 初始化图片编辑器
-        this.initImageEditor(modal, fileData);
+    // 显示图片大图模态框
+    showImageModal(imageUrl) {
+        // 调用 Utils 的静态方法
+        Utils.showImageModal(imageUrl);
     }
 
-    // 初始化图片编辑器
-    initImageEditor(modal, fileData) {
-        const canvas = modal.querySelector('#edit-canvas');
-        const ctx = canvas.getContext('2d');
-        const img = new Image();
-        
-        let currentRotation = 0;
-        let currentScale = 1;
-        let isCropping = false;
-        let cropStart = null;
-        let cropEnd = null;
-        
-        img.onload = () => {
-            canvas.width = Math.min(img.width, 600);
-            canvas.height = (canvas.width / img.width) * img.height;
-            this.drawImage(ctx, img, canvas, currentRotation, currentScale);
-        };
-        
-        img.src = fileData.url;
-
-        // 绑定控制事件
-        modal.querySelector('#crop-btn').addEventListener('click', () => {
-            isCropping = !isCropping;
-            modal.querySelector('#crop-btn').textContent = isCropping ? '完成裁剪' : '开始裁剪';
-            canvas.style.cursor = isCropping ? 'crosshair' : 'default';
-        });
-
-        modal.querySelector('#reset-btn').addEventListener('click', () => {
-            currentRotation = 0;
-            currentScale = 1;
-            isCropping = false;
-            cropStart = null;
-            cropEnd = null;
-            modal.querySelector('#scale-slider').value = 1;
-            modal.querySelector('#scale-value').textContent = '100%';
-            modal.querySelector('#crop-btn').textContent = '开始裁剪';
-            canvas.style.cursor = 'default';
-            this.drawImage(ctx, img, canvas, currentRotation, currentScale);
-        });
-
-        modal.querySelector('#rotate-left').addEventListener('click', () => {
-            currentRotation = (currentRotation - 90) % 360;
-            this.drawImage(ctx, img, canvas, currentRotation, currentScale);
-        });
-
-        modal.querySelector('#rotate-right').addEventListener('click', () => {
-            currentRotation = (currentRotation + 90) % 360;
-            this.drawImage(ctx, img, canvas, currentRotation, currentScale);
-        });
-
-        modal.querySelector('#scale-slider').addEventListener('input', (e) => {
-            currentScale = parseFloat(e.target.value);
-            modal.querySelector('#scale-value').textContent = Math.round(currentScale * 100) + '%';
-            this.drawImage(ctx, img, canvas, currentRotation, currentScale);
-        });
-
-        // 裁剪功能
-        canvas.addEventListener('mousedown', (e) => {
-            if (!isCropping) return;
-            const rect = canvas.getBoundingClientRect();
-            cropStart = {
-                x: e.clientX - rect.left,
-                y: e.clientY - rect.top
-            };
-        });
-
-        canvas.addEventListener('mousemove', (e) => {
-            if (!isCropping || !cropStart) return;
-            const rect = canvas.getBoundingClientRect();
-            cropEnd = {
-                x: e.clientX - rect.left,
-                y: e.clientY - rect.top
-            };
-            this.drawImage(ctx, img, canvas, currentRotation, currentScale);
-            this.drawCropRect(ctx, cropStart, cropEnd);
-        });
-
-        canvas.addEventListener('mouseup', () => {
-            if (!isCropping) return;
-            // 裁剪逻辑在保存时处理
-        });
-
-        // 保存编辑
-        modal.querySelector('#save-edit').addEventListener('click', async () => {
-            try {
-                const editedImageBlob = await this.getEditedImage(canvas, img, currentRotation, currentScale, cropStart, cropEnd);
-                const editedFile = new File([editedImageBlob], fileData.filename, { type: 'image/png' });
-                
-                // 上传编辑后的图片
-                const result = await Utils.uploadFile(editedFile, this.options.paperId);
-                
-                // 更新文件数据
-                const fileIndex = this.files.findIndex(f => f.filename === fileData.filename);
-                if (fileIndex !== -1) {
-                    this.files[fileIndex] = result;
-                    // 更新预览
-                    const previewItem = this.previewArea.querySelector(`[data-filename="${fileData.filename}"]`).closest('.preview-item');
-                    const img = previewItem.querySelector('img');
-                    img.src = result.url;
-                }
-                
-                Utils.showSuccess('图片编辑完成');
-                modal.remove();
-                
-                if (this.options.onChange) {
-                    this.options.onChange(this.files);
-                }
-            } catch (error) {
-                Utils.showError('保存编辑失败: ' + error.message);
-            }
-        });
-    }
-
-    // 绘制图片
-    drawImage(ctx, img, canvas, rotation, scale) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.save();
-        
-        ctx.translate(canvas.width / 2, canvas.height / 2);
-        ctx.rotate((rotation * Math.PI) / 180);
-        ctx.scale(scale, scale);
-        
-        const drawWidth = canvas.width / scale;
-        const drawHeight = canvas.height / scale;
-        
-        ctx.drawImage(img, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
-        ctx.restore();
-    }
-
-    // 绘制裁剪框
-    drawCropRect(ctx, start, end) {
-        if (!start || !end) return;
-        
-        ctx.strokeStyle = '#3498db';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([5, 5]);
-        
-        const width = end.x - start.x;
-        const height = end.y - start.y;
-        
-        ctx.strokeRect(start.x, start.y, width, height);
-        ctx.setLineDash([]);
-    }
-
-    // 获取编辑后的图片
-    async getEditedImage(canvas, img, rotation, scale, cropStart, cropEnd) {
-        const editCanvas = document.createElement('canvas');
-        const editCtx = editCanvas.getContext('2d');
-        
-        let finalWidth = canvas.width;
-        let finalHeight = canvas.height;
-        
-        // 如果有裁剪，调整画布大小
-        if (cropStart && cropEnd) {
-            finalWidth = Math.abs(cropEnd.x - cropStart.x);
-            finalHeight = Math.abs(cropEnd.y - cropStart.y);
-        }
-        
-        editCanvas.width = finalWidth;
-        editCanvas.height = finalHeight;
-        
-        if (cropStart && cropEnd) {
-            // 裁剪模式
-            editCtx.drawImage(canvas, 
-                Math.min(cropStart.x, cropEnd.x), 
-                Math.min(cropStart.y, cropEnd.y),
-                finalWidth, 
-                finalHeight,
-                0, 0, 
-                finalWidth, 
-                finalHeight
-            );
-        } else {
-            // 全图模式
-            editCtx.drawImage(canvas, 0, 0);
-        }
-        
-        return new Promise(resolve => {
-            editCanvas.toBlob(resolve, 'image/png');
-        });
-    }
 }
 
 // 学生选择器组件（微信标签式）

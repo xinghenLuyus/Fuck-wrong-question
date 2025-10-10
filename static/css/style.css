@@ -243,19 +243,34 @@ body {
 
 .preview-item {
     position: relative;
+    display: inline-block;
+    margin: 10px;
     border-radius: 8px;
     overflow: hidden;
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.preview-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
 }
 
 .preview-image {
     width: 150px;
     height: 150px;
     object-fit: cover;
+    display: block;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.preview-image:hover {
+    opacity: 0.9;
 }
 
 .preview-image.existing {
-    border: 2px solid #27ae60;
+    box-shadow: 0 0 0 2px #27ae60 inset;
 }
 
 .preview-image.existing::after {
@@ -263,30 +278,103 @@ body {
     position: absolute;
     bottom: 2px;
     left: 2px;
-    background: rgba(39, 174, 96, 0.8);
+    background: rgba(39, 174, 96, 0.9);
     color: white;
     padding: 2px 6px;
     font-size: 10px;
     border-radius: 3px;
 }
 
-.preview-remove {
+.preview-actions {
     position: absolute;
     top: 5px;
     right: 5px;
-    background: rgba(231, 76, 60, 0.8);
+    display: flex;
+    gap: 5px;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.preview-item:hover .preview-actions {
+    opacity: 1;
+}
+
+.preview-remove {
+    background: rgba(231, 76, 60, 0.9);
     color: white;
     border: none;
     border-radius: 50%;
-    width: 25px;
-    height: 25px;
+    width: 24px;
+    height: 24px;
     cursor: pointer;
-    font-size: 12px;
-    transition: background-color 0.2s ease;
+    font-size: 14px;
+    line-height: 1;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .preview-remove:hover {
     background: rgba(231, 76, 60, 1);
+    transform: scale(1.1);
+}
+
+/* 图片查看大图模态框 */
+.image-modal {
+    display: block;
+    position: fixed;
+    z-index: 9999;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0, 0, 0, 0.9);
+    animation: fadeIn 0.2s;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.image-modal-content {
+    position: relative;
+    margin: auto;
+    padding: 0;
+    width: 90%;
+    max-width: 1200px;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.image-modal-img {
+    max-width: 100%;
+    max-height: 90vh;
+    object-fit: contain;
+    border-radius: 4px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+.image-modal-close {
+    position: absolute;
+    top: 20px;
+    right: 35px;
+    color: #f1f1f1;
+    font-size: 40px;
+    font-weight: bold;
+    cursor: pointer;
+    z-index: 10000;
+    transition: color 0.2s;
+    user-select: none;
+}
+
+.image-modal-close:hover,
+.image-modal-close:focus {
+    color: #ff4444;
 }
 
 /* 学生选择器 */
@@ -605,218 +693,4 @@ body {
 
 .student-list::-webkit-scrollbar-thumb:hover {
     background: #555;
-}
-
-/* 图片上传器样式增强 */
-.preview-item {
-    position: relative;
-    display: inline-block;
-    margin: 10px;
-}
-
-.preview-actions {
-    position: absolute;
-    top: 5px;
-    right: 5px;
-    display: flex;
-    gap: 5px;
-    background: rgba(0, 0, 0, 0.7);
-    border-radius: 4px;
-    padding: 2px;
-}
-
-.preview-edit, .preview-remove {
-    background: none;
-    border: none;
-    color: white;
-    cursor: pointer;
-    padding: 4px 6px;
-    border-radius: 3px;
-    font-size: 12px;
-    transition: background-color 0.2s;
-}
-
-.preview-edit:hover {
-    background: rgba(52, 152, 219, 0.8);
-}
-
-.preview-remove:hover {
-    background: rgba(231, 76, 60, 0.8);
-}
-
-/* 图片编辑器模态框 */
-.image-edit-modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.8);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 2000;
-}
-
-.image-edit-content {
-    background: white;
-    border-radius: 8px;
-    max-width: 90vw;
-    max-height: 90vh;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-}
-
-.image-edit-header {
-    padding: 15px 20px;
-    border-bottom: 1px solid #eee;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background: #f8f9fa;
-}
-
-.image-edit-header h3 {
-    margin: 0;
-    color: #2c3e50;
-}
-
-.close-btn {
-    background: none;
-    border: none;
-    font-size: 24px;
-    cursor: pointer;
-    color: #7f8c8d;
-    padding: 0;
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.close-btn:hover {
-    background: rgba(231, 76, 60, 0.1);
-    color: #e74c3c;
-}
-
-.image-edit-body {
-    display: flex;
-    flex: 1;
-    min-height: 400px;
-}
-
-.image-edit-container {
-    flex: 2;
-    padding: 20px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    background: #f8f9fa;
-}
-
-#edit-canvas {
-    max-width: 100%;
-    max-height: 100%;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    cursor: default;
-}
-
-.image-edit-controls {
-    flex: 1;
-    padding: 20px;
-    border-left: 1px solid #eee;
-    background: white;
-    min-width: 200px;
-}
-
-.control-group {
-    margin-bottom: 20px;
-}
-
-.control-group label {
-    display: block;
-    margin-bottom: 8px;
-    font-weight: 600;
-    color: #2c3e50;
-    font-size: 14px;
-}
-
-.control-group .btn {
-    margin-right: 5px;
-    margin-bottom: 5px;
-    padding: 6px 12px;
-    font-size: 12px;
-}
-
-#scale-slider {
-    width: 100%;
-    margin-bottom: 5px;
-}
-
-#scale-value {
-    font-size: 12px;
-    color: #7f8c8d;
-}
-
-.image-edit-footer {
-    padding: 15px 20px;
-    border-top: 1px solid #eee;
-    display: flex;
-    justify-content: flex-end;
-    gap: 10px;
-    background: #f8f9fa;
-}
-
-/* 添加题目页面样式增强 */
-.image-editor-note {
-    margin-top: 10px;
-    padding: 15px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-radius: 8px;
-    color: white;
-}
-
-.image-editor-note p {
-    margin: 0 0 10px 0;
-    font-weight: 600;
-}
-
-.image-editor-note ul {
-    margin: 0;
-    padding-left: 20px;
-}
-
-.image-editor-note li {
-    margin-bottom: 5px;
-    font-size: 14px;
-}
-
-/* 响应式设计 */
-@media (max-width: 768px) {
-    .image-edit-body {
-        flex-direction: column;
-    }
-    
-    .image-edit-container {
-        flex: none;
-        height: 300px;
-    }
-    
-    .image-edit-controls {
-        border-left: none;
-        border-top: 1px solid #eee;
-    }
-    
-    .image-edit-footer {
-        flex-direction: column;
-    }
-    
-    .image-edit-footer .btn {
-        width: 100%;
-        margin-bottom: 10px;
-    }
 }
