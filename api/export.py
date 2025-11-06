@@ -188,9 +188,11 @@ async def export_student_word(paper_id: int, request: ExportRequest, db: Session
                 url = url.strip()
                 if url:
                     if url.startswith('/static/uploads/'):
-                        image_path = f"static/uploads/{url.split('/')[-1]}"
+                        # Preserve the full uploads path (may include subfolders like paper_8)
+                        # e.g. '/static/uploads/paper_8/uuid.png' -> 'static/uploads/paper_8/uuid.png'
+                        image_path = os.path.normpath(url.lstrip('/'))
                     else:
-                        image_path = url
+                        image_path = os.path.normpath(url)
                     if os.path.exists(image_path):
                         try:
                             image_width = qset.get("image_width", 5.0) * qset.get("image_scale", 1.0)
@@ -279,9 +281,10 @@ async def export_all_students(paper_id: int, db: Session = Depends(get_db)):
                             url = url.strip()
                             if url:
                                 if url.startswith('/static/uploads/'):
-                                    image_path = f"static/uploads/{url.split('/')[-1]}"
+                                    # Preserve the full uploads path (may include subfolders like paper_8)
+                                    image_path = os.path.normpath(url.lstrip('/'))
                                 else:
-                                    image_path = url
+                                    image_path = os.path.normpath(url)
                                 if os.path.exists(image_path):
                                     try:
                                         image_width = qset.get("image_width", 5.0) * qset.get("image_scale", 1.0)
@@ -372,9 +375,10 @@ async def export_multiple_students(paper_id: int, request: ExportMultipleRequest
                             url = url.strip()
                             if url:
                                 if url.startswith('/static/uploads/'):
-                                    image_path = f"static/uploads/{url.split('/')[-1]}"
+                                    # Preserve the full uploads path (may include subfolders like paper_8)
+                                    image_path = os.path.normpath(url.lstrip('/'))
                                 else:
-                                    image_path = url
+                                    image_path = os.path.normpath(url)
                                 if os.path.exists(image_path):
                                     try:
                                         image_width = qset.get("image_width", 5.0) * qset.get("image_scale", 1.0)
